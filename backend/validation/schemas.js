@@ -36,6 +36,21 @@ const roleChangeSchema = z.object({
   targetUserName: z.string().trim().min(1).max(32),
 });
 
+const updateServerSettingsSchema = z.object({
+  serverId: z.string().trim().min(1).max(64),
+  actorUserName: z.string().trim().min(1).max(32),
+  name: z.string().trim().min(1).max(64).optional(),
+  description: z.string().trim().max(500).optional(),
+});
+
+const updateRoomSettingsSchema = z.object({
+  serverId: z.string().trim().min(1).max(64),
+  roomName: z.string().trim().min(1).max(64),
+  actorUserName: z.string().trim().min(1).max(32),
+  name: z.string().trim().min(1).max(64).optional(),
+  topic: z.string().trim().max(500).optional(),
+});
+
 function parseOrThrow(schema, payload, eventName) {
   const parsed = schema.safeParse(payload);
   if (!parsed.success) {
@@ -57,5 +72,7 @@ module.exports = {
   createServerSchema,
   createRoomSchema,
   roleChangeSchema,
+  updateServerSettingsSchema,
+  updateRoomSettingsSchema,
   parseOrThrow,
 };

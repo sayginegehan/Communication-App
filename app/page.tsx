@@ -30,6 +30,16 @@ export default function Home() {
   
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string } | null>(null);
   const [userVolumes, setUserVolumes] = useState<{ [key: string]: number }>({});
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const [roomSettingsOpen, setRoomSettingsOpen] = useState(false);
+  const [serverSettingsName, setServerSettingsName] = useState("");
+  const [serverSettingsDescription, setServerSettingsDescription] = useState("");
+  const [roomSettingsTarget, setRoomSettingsTarget] = useState("");
+  const [roomSettingsName, setRoomSettingsName] = useState("");
+  const [roomSettingsTopic, setRoomSettingsTopic] = useState("");
+  const [transferTarget, setTransferTarget] = useState("");
+  const [archivedServers, setArchivedServers] = useState<any[]>([]);
+  const [archivedRooms, setArchivedRooms] = useState<any[]>([]);
 
   const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
   const remoteAudios = useRef<{ [key: string]: HTMLAudioElement }>({}); 
@@ -50,6 +60,8 @@ export default function Home() {
       }
     });
     socket.on("room-list", (rooms) => setActiveRooms(rooms));
+    socket.on("archived-server-list", (list) => setArchivedServers(list));
+    socket.on("archived-room-list", (list) => setArchivedRooms(list));
     socket.on("user-list", (userList) => setUsers(userList));
     socket.on("receive-message", (msg) => setMessages((prev) => [...prev, msg]));
     socket.on("message-history", (history) => setMessages(history));
@@ -206,6 +218,119 @@ export default function Home() {
     );
   };
 
+  const updateServerSettings = () => {
+    socket.emit(
+      "update-server-settings",
+      {
+        serverId: currentServer,
+        actorUserName: userName,
+        name: serverSettingsName || currentServer,
+        description: serverSettingsDescription,
+      },
+      (res: any) => {
+        if (res?.ok) {
+          setServerSettingsOpen(false);
+        } else if (res?.error) {
+          alert(res.error);
+        }
+      }
+    );
+  };
+
+  const deleteServer = () => {
+    if (!confirm("Sunucuyu arşive al (soft delete)?")) return;
+    socket.emit(
+      "delete-server",
+      { serverId: currentServer, actorUserName: userName, targetUserName: userName },
+      (res: any) => {
+        if (res?.ok) {
+          setCurrentServer("default");
+          setCurrentRoom("");
+        } else if (res?.error) {
+          alert(res.error);
+        }
+      }
+    );
+  };
+
+  const openRoomSettings = (roomName: string) => {
+    setRoomSettingsTarget(roomName);
+    setRoomSettingsName(roomName);
+    setRoomSettingsTopic("");
+    setRoomSettingsOpen(true);
+  };
+
+  const updateRoomSettings = () => {
+    socket.emit(
+      "update-room-settings",
+      {
+        serverId: currentServer,
+        roomName: roomSettingsTarget,
+        actorUserName: userName,
+        name: roomSettingsName || roomSettingsTarget,
+        topic: roomSettingsTopic,
+      },
+      (res: any) => {
+        if (res?.ok) {
+          setRoomSettingsOpen(false);
+        } else if (res?.error) {
+          alert(res.error);
+        }
+      }
+    );
+  };
+
+  const transferOwnership = () => {
+    if (!transferTarget) return;
+    socket.emit(
+      "transfer-owner",
+      { serverId: currentServer, actorUserName: userName, targetUserName: transferTarget },
+      (res: any) => {
+        if (res?.ok) {
+          setTransferTarget("");
+          setServerSettingsOpen(false);
+        } else if (res?.error) {
+          alert(res.error);
+        }
+      }
+    );
+  };
+
+  const deleteRoom = (roomName: string) => {
+    if (!confirm(`"${roomName}" odasını arşive al?`)) return;
+    socket.emit(
+      "delete-room",
+      { serverId: currentServer, roomName, actorUserName: userName },
+      (res: any) => {
+        if (res?.ok && currentRoom === roomName) {
+          setCurrentRoom("");
+        } else if (!res?.ok && res?.error) {
+          alert(res.error);
+        }
+      }
+    );
+  };
+
+  const restoreServer = (serverId: string) => {
+    socket.emit(
+      "restore-server",
+      { serverId, actorUserName: userName, targetUserName: userName },
+      (res: any) => {
+        if (!res?.ok && res?.error) alert(res.error);
+      }
+    );
+  };
+
+  const restoreRoom = (serverId: string, roomName: string) => {
+    socket.emit(
+      "restore-room",
+      { serverId, roomName, actorUserName: userName },
+      (res: any) => {
+        if (!res?.ok && res?.error) alert(res.error);
+      }
+    );
+  };
+
   const handleScreenShare = async () => {
     if (!isSharingScreen) {
       try {
@@ -278,9 +403,12 @@ export default function Home() {
             <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Odalar</h3>
             <div className="space-y-1">
               {roomsToRender.map(room => (
-                <button key={room.name} onClick={() => handleJoinRoom(room.name)} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all font-bold text-sm transform hover:scale-105 active:scale-95 duration-200 ${currentRoom === room.name ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'}`}>
+                <button key={`${room.serverId || "default"}:${room.name}`} onContextMenu={(e) => { e.preventDefault(); if (myRole === "owner" || myRole === "admin" || myRole === "mod") openRoomSettings(room.name); }} onClick={() => handleJoinRoom(room.name)} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all font-bold text-sm transform hover:scale-105 active:scale-95 duration-200 ${currentRoom === room.name ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'}`}>
                   <span># {room.name}</span>
                   <span className="text-[10px] bg-slate-700 px-2 rounded-full">{room.count}</span>
+                  {(myRole === "owner" || myRole === "admin") && (
+                    <span onClick={(e) => { e.stopPropagation(); deleteRoom(room.name); }} className="text-[9px] ml-2 text-rose-400">sil</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -298,6 +426,26 @@ export default function Home() {
               <input type="text" placeholder="Sunucu adı..." className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs outline-none focus:border-rose-500 transition-colors" value={newServerName} onChange={(e) => setNewServerName(e.target.value)} />
               <button onClick={createServer} className="bg-rose-600 text-white px-3 rounded-xl font-bold text-xs transform hover:scale-125 active:scale-90 transition-all shadow-lg">+</button>
             </div>
+            {(myRole === "owner" || myRole === "admin") && (
+              <div className="flex gap-2 px-2 mt-2">
+                <button onClick={() => { const selected = servers.find((s) => s.id === currentServer); setServerSettingsName(selected?.name || currentServer); setServerSettingsDescription(selected?.description || ""); setServerSettingsOpen(true); }} className="flex-1 bg-slate-800 text-xs rounded-xl p-2 font-bold">Sunucu Ayarları</button>
+                {myRole === "owner" && (
+                  <button onClick={deleteServer} className="bg-rose-700 text-xs rounded-xl p-2 font-bold">Sil</button>
+                )}
+              </div>
+            )}
+            {archivedServers.length > 0 && (
+              <div className="mt-3 px-2">
+                <h4 className="text-[9px] font-black uppercase text-slate-500 mb-2">Arşiv Sunucular</h4>
+                <div className="space-y-1">
+                  {archivedServers.map((server) => (
+                    <button key={`archived:${server.id}`} onClick={() => restoreServer(server.id)} className="w-full text-left p-2 rounded-xl text-[10px] bg-slate-800 hover:bg-slate-700">
+                      Geri Al: {server.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Yeni Oda</h3>
@@ -306,6 +454,20 @@ export default function Home() {
               <button onClick={createRoom} className="bg-rose-600 text-white px-3 rounded-xl font-bold text-xs transform hover:scale-125 active:scale-90 transition-all shadow-lg">+</button>
             </div>
           </div>
+          {archivedRooms.filter((room) => room.serverId === currentServer).length > 0 && (
+            <div>
+              <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Arşiv Odalar</h3>
+              <div className="space-y-1 px-2">
+                {archivedRooms
+                  .filter((room) => room.serverId === currentServer)
+                  .map((room) => (
+                    <button key={`archived-room:${room.serverId}:${room.name}`} onClick={() => restoreRoom(room.serverId, room.name)} className="w-full text-left p-2 rounded-xl text-[10px] bg-slate-800 hover:bg-slate-700">
+                      Geri Al: {room.name}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="p-4 bg-slate-800/50 border-t border-slate-800 space-y-3">
           <button onClick={() => { const t = localStream.current?.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; socket.emit("mute-status", !t.enabled); } setIsMuted(!isMuted); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transform hover:scale-105 active:scale-95 transition-all ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>
@@ -429,6 +591,48 @@ export default function Home() {
                 setUserVolumes(prev => ({ ...prev, [contextMenu!.userId]: vol }));
                 if (remoteAudios.current[contextMenu!.userId]) remoteAudios.current[contextMenu!.userId].volume = vol;
             }} />
+          </div>
+        </div>
+      )}
+
+      {serverSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-4 space-y-3">
+            <h3 className="text-sm font-black uppercase text-slate-200">Sunucu Ayarları</h3>
+            <input value={serverSettingsName} onChange={(e) => setServerSettingsName(e.target.value)} placeholder="Sunucu adı" className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs" />
+            <textarea value={serverSettingsDescription} onChange={(e) => setServerSettingsDescription(e.target.value)} placeholder="Açıklama" className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs min-h-20" />
+            <div className="flex gap-2">
+              <button onClick={updateServerSettings} className="flex-1 bg-sky-600 rounded-xl p-2 text-xs font-bold">Kaydet</button>
+              <button onClick={() => setServerSettingsOpen(false)} className="bg-slate-700 rounded-xl p-2 text-xs font-bold">Kapat</button>
+            </div>
+            {myRole === "owner" && (
+              <div className="border-t border-slate-700 pt-3 space-y-2">
+                <label className="text-[10px] uppercase text-slate-400 font-bold">Sahiplik Devri</label>
+                <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value)} className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs">
+                  <option value="">Kullanıcı seç</option>
+                  {users
+                    .filter((u) => u.id !== socket.id)
+                    .map((u) => (
+                      <option key={`transfer:${u.id}`} value={u.name}>{u.name}</option>
+                    ))}
+                </select>
+                <button onClick={transferOwnership} className="w-full bg-violet-600 rounded-xl p-2 text-xs font-bold">Sahipliği Devret</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {roomSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-4 space-y-3">
+            <h3 className="text-sm font-black uppercase text-slate-200">Oda Ayarları</h3>
+            <input value={roomSettingsName} onChange={(e) => setRoomSettingsName(e.target.value)} placeholder="Oda adı" className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs" />
+            <textarea value={roomSettingsTopic} onChange={(e) => setRoomSettingsTopic(e.target.value)} placeholder="Konu" className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs min-h-20" />
+            <div className="flex gap-2">
+              <button onClick={updateRoomSettings} className="flex-1 bg-sky-600 rounded-xl p-2 text-xs font-bold">Kaydet</button>
+              <button onClick={() => setRoomSettingsOpen(false)} className="bg-slate-700 rounded-xl p-2 text-xs font-bold">Kapat</button>
+            </div>
           </div>
         </div>
       )}
