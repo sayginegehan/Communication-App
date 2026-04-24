@@ -10,6 +10,7 @@ function defaultStore() {
 
 class JsonStore {
   constructor(filePath) {
+    this.kind = "json";
     this.filePath = path.resolve(filePath);
     this.data = defaultStore();
     this.ensureFile();

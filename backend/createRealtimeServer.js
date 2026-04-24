@@ -24,6 +24,7 @@ async function createRealtimeServer(env) {
     httpServer,
     io,
     store,
+    storeKind: store.kind || "unknown",
   };
 }
 

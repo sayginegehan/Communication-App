@@ -3,6 +3,7 @@ const { PrismaClient } = require("@prisma/client");
 
 class PrismaStore {
   constructor(databaseUrl) {
+    this.kind = "prisma";
     this.prisma = new PrismaClient({
       datasources: {
         db: { url: databaseUrl },
