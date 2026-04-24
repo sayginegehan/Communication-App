@@ -12,6 +12,8 @@ const {
   updateRoomSettingsSchema,
   parseOrThrow,
 } = require("../validation/schemas");
+const { getPrismaClient } = require("../lib/prisma");
+const { verifyAuthToken } = require("../lib/jwt");
 
 function buildChatMessage(user, text) {
   return {
@@ -241,6 +243,67 @@ function registerSocketHandlers(io, { state, store, env }) {
       await emitServerList(io, store, socket);
       await emitRoomList(io, state, store, socket);
       await emitArchivedState(io, store, socket);
+    });
+
+    socket.on("join_channel", async ({ channelId }, ack) => {
+      try {
+        if (!channelId) throw new Error("channelId required");
+        socket.join(`channel:${channelId}`);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("leave_channel", async ({ channelId }, ack) => {
+      try {
+        if (!channelId) throw new Error("channelId required");
+        socket.leave(`channel:${channelId}`);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("typing_start", ({ channelId, username }) => {
+      if (!channelId) return;
+      socket.to(`channel:${channelId}`).emit("typing_start", { channelId, username });
+    });
+
+    socket.on("typing_stop", ({ channelId, username }) => {
+      if (!channelId) return;
+      socket.to(`channel:${channelId}`).emit("typing_stop", { channelId, username });
+    });
+
+    socket.on("send_message", async ({ channelId, content }, ack) => {
+      try {
+        if (!channelId || !content) throw new Error("channelId and content required");
+        const prisma = getPrismaClient();
+        const token = socket.handshake.auth?.token;
+        if (!token) throw new Error("Auth token required");
+        const decoded = verifyAuthToken(token);
+        const membership = await prisma.serverMember.findFirst({
+          where: {
+            userId: decoded.sub,
+            server: { channels: { some: { id: channelId } } },
+          },
+        });
+        if (!membership) throw new Error("Not a member of this channel");
+        const message = await prisma.channelMessage.create({
+          data: { channelId, userId: decoded.sub, content },
+          include: { user: { select: { id: true, username: true } } },
+        });
+        io.to(`channel:${channelId}`).emit("new_message", {
+          id: message.id,
+          channelId: message.channelId,
+          content: message.content,
+          createdAt: message.createdAt,
+          user: message.user,
+        });
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
     });
 
     socket.on("create-server", async (payload, ack) => {

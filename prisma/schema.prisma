@@ -48,3 +48,54 @@ model RoomEvent {
 
   @@index([roomId, createdAt])
 }
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  username     String         @unique
+  passwordHash String
+  createdAt    DateTime       @default(now())
+  memberships  ServerMember[]
+  messages     ChannelMessage[]
+}
+
+model ServerEntity {
+  id        String         @id @default(cuid())
+  name      String
+  ownerId   String
+  createdAt DateTime       @default(now())
+  channels  Channel[]
+  members   ServerMember[]
+}
+
+model ServerMember {
+  id        String       @id @default(cuid())
+  userId    String
+  serverId  String
+  role      String       @default("member")
+  joinedAt  DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server    ServerEntity @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId])
+}
+
+model Channel {
+  id        String           @id @default(cuid())
+  serverId  String
+  name      String
+  type      String           @default("text")
+  createdAt DateTime         @default(now())
+  server    ServerEntity     @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  messages  ChannelMessage[]
+}
+
+model ChannelMessage {
+  id        String   @id @default(cuid())
+  channelId String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
