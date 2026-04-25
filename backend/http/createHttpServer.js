@@ -15,10 +15,22 @@ function json(res, statusCode, payload, extraHeaders = {}) {
   res.end(JSON.stringify(payload));
 }
 
+function normalizeOrigin(origin) {
+  return String(origin || "").trim().replace(/\/+$/, "");
+}
+
 function buildCorsHeaders(origin, allowedOrigins) {
-  const fallback = allowedOrigins[0] || "*";
-  const effectiveOrigin =
-    origin && allowedOrigins.includes(origin) ? origin : fallback;
+  const normalizedOrigin = normalizeOrigin(origin);
+  const normalizedAllowedOrigins = (allowedOrigins || []).map((entry) =>
+    normalizeOrigin(entry)
+  );
+  const isAllowedOrigin = normalizedOrigin
+    ? normalizedAllowedOrigins.includes(normalizedOrigin)
+    : true;
+  const fallback = normalizedAllowedOrigins[0] || "";
+  const effectiveOrigin = isAllowedOrigin
+    ? normalizedOrigin || fallback || "*"
+    : fallback || "*";
   return {
     "Access-Control-Allow-Origin": effectiveOrigin,
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",

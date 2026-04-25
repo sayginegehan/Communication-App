@@ -1,4 +1,11 @@
-const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:3000"];
+const DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://communication-app-eight.vercel.app",
+];
+
+function normalizeOrigin(origin) {
+  return String(origin || "").trim().replace(/\/+$/, "");
+}
 
 function parseOrigins(originsValue) {
   if (!originsValue) {
@@ -7,13 +14,17 @@ function parseOrigins(originsValue) {
 
   return originsValue
     .split(",")
-    .map((origin) => origin.trim())
+    .map((origin) => normalizeOrigin(origin))
     .filter(Boolean);
 }
 
 function buildCorsOriginValidator(allowedOrigins) {
+  const normalizedAllowedOrigins = allowedOrigins.map((origin) =>
+    normalizeOrigin(origin)
+  );
   return (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (!normalizedOrigin || normalizedAllowedOrigins.includes(normalizedOrigin)) {
       callback(null, true);
       return;
     }
