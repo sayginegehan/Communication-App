@@ -5,8 +5,7 @@ const path = require("path");
 function defaultStore() {
   return {
     rooms: {},
-    servers: {},
-    roomSettings: {},
+    users: {},
   };
 }
 
@@ -189,6 +188,27 @@ class JsonStore {
   async deleteRoom(roomId) {
     delete this.data.rooms[roomId];
     this.flush();
+  }
+
+  async findUserByEmail(email) {
+    return this.data.users[email.toLowerCase()] || null;
+  }
+
+  async createUser({ email, userName, passwordHash }) {
+    const normalizedEmail = email.toLowerCase();
+    const user = {
+      id: `user_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      email: normalizedEmail,
+      userName,
+      passwordHash,
+    };
+    this.data.users[normalizedEmail] = user;
+    this.flush();
+    return {
+      id: user.id,
+      email: user.email,
+      userName: user.userName,
+    };
   }
 
   async close() {}

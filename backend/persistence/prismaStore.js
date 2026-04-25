@@ -191,6 +191,33 @@ class PrismaStore {
     });
   }
 
+  async findUserByEmail(email) {
+    return this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      select: {
+        id: true,
+        email: true,
+        userName: true,
+        passwordHash: true,
+      },
+    });
+  }
+
+  async createUser({ email, userName, passwordHash }) {
+    return this.prisma.user.create({
+      data: {
+        email: email.toLowerCase(),
+        userName,
+        passwordHash,
+      },
+      select: {
+        id: true,
+        email: true,
+        userName: true,
+      },
+    });
+  }
+
   async close() {
     await this.prisma.$disconnect();
   }

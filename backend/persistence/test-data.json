@@ -1,0 +1,415 @@
+{
+  "rooms": {
+    "__server__:default": {
+      "roomId": "__server__:default",
+      "messages": [],
+      "events": []
+    },
+    "__role__:default::member::ege": {
+      "roomId": "__role__:default::member::ege",
+      "messages": [],
+      "events": []
+    },
+    "default::alpha": {
+      "roomId": "default::alpha",
+      "messages": [
+        {
+          "id": 1777140276548,
+          "sender": "ege",
+          "text": "selam",
+          "time": "21:04"
+        },
+        {
+          "id": 1777141102467,
+          "sender": "ege",
+          "text": "selam",
+          "time": "21:18"
+        }
+      ],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "4ZCnL1c6dji2_U-XAAAB",
+          "userName": "ege",
+          "at": 1777140276544
+        },
+        {
+          "type": "disconnect",
+          "socketId": "4ZCnL1c6dji2_U-XAAAB",
+          "userName": "ege",
+          "at": 1777140276725
+        },
+        {
+          "type": "join",
+          "socketId": "lIkGh91fpSuvMnLKAAAD",
+          "userName": "alice",
+          "at": 1777140276737
+        },
+        {
+          "type": "disconnect",
+          "socketId": "lIkGh91fpSuvMnLKAAAD",
+          "userName": "alice",
+          "at": 1777140276744
+        },
+        {
+          "type": "join",
+          "socketId": "ZQd8_fS1Wv0goHYjAAAB",
+          "userName": "ege",
+          "at": 1777141102464
+        },
+        {
+          "type": "disconnect",
+          "socketId": "ZQd8_fS1Wv0goHYjAAAB",
+          "userName": "ege",
+          "at": 1777141102638
+        },
+        {
+          "type": "join",
+          "socketId": "KuUSxbT-PuFxYhekAAAD",
+          "userName": "alice",
+          "at": 1777141102644
+        },
+        {
+          "type": "disconnect",
+          "socketId": "KuUSxbT-PuFxYhekAAAD",
+          "userName": "alice",
+          "at": 1777141102647
+        }
+      ]
+    },
+    "__role__:default::member::alice": {
+      "roomId": "__role__:default::member::alice",
+      "messages": [],
+      "events": []
+    },
+    "default::beta": {
+      "roomId": "default::beta",
+      "messages": [],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "jicCmL8aW9XIpdVpAAAF",
+          "userName": "ege",
+          "at": 1777140276759
+        },
+        {
+          "type": "join",
+          "socketId": "dbMe8v8ywDBfbdj8AAAH",
+          "userName": "ali",
+          "at": 1777140276767
+        },
+        {
+          "type": "disconnect",
+          "socketId": "jicCmL8aW9XIpdVpAAAF",
+          "userName": "ege",
+          "at": 1777140276775
+        },
+        {
+          "type": "disconnect",
+          "socketId": "dbMe8v8ywDBfbdj8AAAH",
+          "userName": "ali",
+          "at": 1777140276776
+        },
+        {
+          "type": "join",
+          "socketId": "mh5cmaXiaSQtUj1rAAAF",
+          "userName": "ege",
+          "at": 1777141102655
+        },
+        {
+          "type": "join",
+          "socketId": "zB5emhGItA3ZPZPYAAAH",
+          "userName": "ali",
+          "at": 1777141102658
+        },
+        {
+          "type": "disconnect",
+          "socketId": "mh5cmaXiaSQtUj1rAAAF",
+          "userName": "ege",
+          "at": 1777141102661
+        },
+        {
+          "type": "disconnect",
+          "socketId": "zB5emhGItA3ZPZPYAAAH",
+          "userName": "ali",
+          "at": 1777141102661
+        }
+      ]
+    },
+    "__role__:default::member::ali": {
+      "roomId": "__role__:default::member::ali",
+      "messages": [],
+      "events": []
+    },
+    "default::kalici-oda": {
+      "roomId": "default::kalici-oda",
+      "messages": [],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "JH2ISZ-hWFgSJzRFAAAJ",
+          "userName": "ege",
+          "at": 1777140276787
+        },
+        {
+          "type": "disconnect",
+          "socketId": "JH2ISZ-hWFgSJzRFAAAJ",
+          "userName": "ege",
+          "at": 1777140276792
+        },
+        {
+          "type": "join",
+          "socketId": "ZwlZaTZFOO01B7wmAAAJ",
+          "userName": "ege",
+          "at": 1777141102668
+        },
+        {
+          "type": "disconnect",
+          "socketId": "ZwlZaTZFOO01B7wmAAAJ",
+          "userName": "ege",
+          "at": 1777141102670
+        }
+      ]
+    },
+    "__role__:default::member::qa": {
+      "roomId": "__role__:default::member::qa",
+      "messages": [],
+      "events": []
+    },
+    "default::kontrol": {
+      "roomId": "default::kontrol",
+      "messages": [],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "mjpNaojA-8skKgzyAAAL",
+          "userName": "qa",
+          "at": 1777140276803
+        },
+        {
+          "type": "disconnect",
+          "socketId": "mjpNaojA-8skKgzyAAAL",
+          "userName": "qa",
+          "at": 1777140276808
+        },
+        {
+          "type": "join",
+          "socketId": "FOuMIVwUv70LO22oAAAL",
+          "userName": "qa",
+          "at": 1777141102674
+        },
+        {
+          "type": "disconnect",
+          "socketId": "FOuMIVwUv70LO22oAAAL",
+          "userName": "qa",
+          "at": 1777141102676
+        }
+      ]
+    },
+    "__server__:takima": {
+      "roomId": "__server__:takima",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takima::owner::ege": {
+      "roomId": "__role__:takima::owner::ege",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takima::member::ege": {
+      "roomId": "__role__:takima::member::ege",
+      "messages": [],
+      "events": []
+    },
+    "takima::genel": {
+      "roomId": "takima::genel",
+      "messages": [],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "ApCjDPkpPP9VFhjIAAAN",
+          "userName": "ege",
+          "at": 1777140276826
+        },
+        {
+          "type": "disconnect",
+          "socketId": "ApCjDPkpPP9VFhjIAAAN",
+          "userName": "ege",
+          "at": 1777140276829
+        },
+        {
+          "type": "join",
+          "socketId": "CKhXO3dzucMsZFzTAAAN",
+          "userName": "ege",
+          "at": 1777141102684
+        },
+        {
+          "type": "disconnect",
+          "socketId": "CKhXO3dzucMsZFzTAAAN",
+          "userName": "ege",
+          "at": 1777141102686
+        }
+      ]
+    },
+    "__server__:takimb": {
+      "roomId": "__server__:takimb",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimb::owner::owner": {
+      "roomId": "__role__:takimb::owner::owner",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimb::member::owner": {
+      "roomId": "__role__:takimb::member::owner",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimb::member::member": {
+      "roomId": "__role__:takimb::member::member",
+      "messages": [],
+      "events": []
+    },
+    "takimb::lobi": {
+      "roomId": "takimb::lobi",
+      "messages": [],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "JweBxZnrDyIASqQeAAAR",
+          "userName": "member",
+          "at": 1777140276843
+        },
+        {
+          "type": "disconnect",
+          "socketId": "JweBxZnrDyIASqQeAAAR",
+          "userName": "member",
+          "at": 1777140276848
+        },
+        {
+          "type": "join",
+          "socketId": "wMei5S9MuLbrZ9r1AAAR",
+          "userName": "member",
+          "at": 1777141102695
+        },
+        {
+          "type": "disconnect",
+          "socketId": "wMei5S9MuLbrZ9r1AAAR",
+          "userName": "member",
+          "at": 1777141102698
+        }
+      ]
+    },
+    "__server__:takimc": {
+      "roomId": "__server__:takimc",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimc::owner::ownerx": {
+      "roomId": "__role__:takimc::owner::ownerx",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimc::member::ownerx": {
+      "roomId": "__role__:takimc::member::ownerx",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimc::member::memberx": {
+      "roomId": "__role__:takimc::member::memberx",
+      "messages": [],
+      "events": []
+    },
+    "takimc::lobi": {
+      "roomId": "takimc::lobi",
+      "messages": [],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "zK1Qum8yrjkgmUjFAAAV",
+          "userName": "memberx",
+          "at": 1777140276861
+        },
+        {
+          "type": "disconnect",
+          "socketId": "zK1Qum8yrjkgmUjFAAAV",
+          "userName": "memberx",
+          "at": 1777140276872
+        },
+        {
+          "type": "join",
+          "socketId": "va06_6fHoQ138T65AAAV",
+          "userName": "memberx",
+          "at": 1777141102709
+        },
+        {
+          "type": "disconnect",
+          "socketId": "va06_6fHoQ138T65AAAV",
+          "userName": "memberx",
+          "at": 1777141102717
+        }
+      ]
+    },
+    "takimc::admin-oda": {
+      "roomId": "takimc::admin-oda",
+      "messages": [],
+      "events": []
+    },
+    "__server__:takimd": {
+      "roomId": "__server__:takimd",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimd::member::ownerd": {
+      "roomId": "__role__:takimd::member::ownerd",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimd::member::memberd": {
+      "roomId": "__role__:takimd::member::memberd",
+      "messages": [],
+      "events": []
+    },
+    "takimd::lobi": {
+      "roomId": "takimd::lobi",
+      "messages": [],
+      "events": [
+        {
+          "type": "join",
+          "socketId": "FXPXMIMqLQKHSz1LAAAZ",
+          "userName": "memberd",
+          "at": 1777140276883
+        },
+        {
+          "type": "disconnect",
+          "socketId": "FXPXMIMqLQKHSz1LAAAZ",
+          "userName": "memberd",
+          "at": 1777140276894
+        },
+        {
+          "type": "join",
+          "socketId": "H9kQvxOtp-f2kfmjAAAZ",
+          "userName": "memberd",
+          "at": 1777141102723
+        },
+        {
+          "type": "disconnect",
+          "socketId": "H9kQvxOtp-f2kfmjAAAZ",
+          "userName": "memberd",
+          "at": 1777141102731
+        }
+      ]
+    },
+    "takimd::admin-oda": {
+      "roomId": "takimd::admin-oda",
+      "messages": [],
+      "events": []
+    },
+    "__role__:takimd::owner::memberd": {
+      "roomId": "__role__:takimd::owner::memberd",
+      "messages": [],
+      "events": []
+    }
+  }
+}

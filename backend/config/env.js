@@ -1,4 +1,11 @@
-const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:3000"];
+const DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://communication-app-eight.vercel.app",
+];
+
+function normalizeOrigin(origin) {
+  return String(origin || "").trim().replace(/\/+$/, "");
+}
 
 /** ALLOWED_ORIGINS entry: allow any https deployment on vercel.app (previews + production). */
 const VERCEL_WILDCARD_MARKERS = new Set([
@@ -13,7 +20,7 @@ function parseOrigins(originsValue) {
 
   return originsValue
     .split(",")
-    .map((origin) => origin.trim())
+    .map((origin) => normalizeOrigin(origin))
     .filter(Boolean);
 }
 
@@ -45,20 +52,14 @@ function originAllowedByList(origin, allowedOrigins) {
 }
 
 function buildCorsOriginValidator(allowedOrigins) {
+  const normalizedAllowedOrigins = allowedOrigins.map((origin) =>
+    normalizeOrigin(origin)
+  );
   return (origin, callback) => {
-    try {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-      if (originAllowedByList(origin, allowedOrigins)) {
-        // credentials: true requires a concrete ACAO value, not "*"
-        callback(null, origin);
-        return;
-      }
-      callback(new Error("Origin not allowed by CORS"));
-    } catch (e) {
-      callback(e);
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (!normalizedOrigin || normalizedAllowedOrigins.includes(normalizedOrigin)) {
+      callback(null, true);
+      return;
     }
   };
 }

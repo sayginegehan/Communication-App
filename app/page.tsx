@@ -2,781 +2,386 @@
 import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 
-const socketServerUrl =
-  process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:3001";
-const socketAuthToken = process.env.NEXT_PUBLIC_SOCKET_AUTH_TOKEN || "";
-const socketPath = process.env.NEXT_PUBLIC_SOCKET_PATH || "/socket.io";
-const socket = io(socketServerUrl, {
-  path: socketPath,
-  auth: socketAuthToken ? { token: socketAuthToken } : undefined,
-});
+import AuthContainer from "../components/auth/authContainer";
+import ServerList from "../components/Sidebar/ServerList";
+import ChannelList from "../components/Sidebar/ChannelList";
+import ControlBar from "../components/Voice/ControlBar";
+import ChatArea from "../components/Chat/ChatArea";
+import ProfileModal from "../components/Profile/ProfileModal";
+
+const socketServerUrl = "https://communication-app-production.up.railway.app";
+const socketPath = "/socket.io";
+const socket = io(socketServerUrl, { path: socketPath, transports: ["websocket", "polling"], withCredentials: true });
+
+type ServerItem = { id: string; name: string };
+type RoomItem = { name: string; serverId?: string; count?: number };
+type UserItem = {
+  id: string;
+  name: string;
+  roomName?: string;
+  isMuted?: boolean;
+  isSpeaking?: boolean;
+};
+type ChatMessage = { id: number | string; sender: string; text: string; time?: string };
+type SignalPayload = {
+  from: string;
+  offer?: RTCSessionDescriptionInit;
+  answer?: RTCSessionDescriptionInit;
+  candidate?: RTCIceCandidateInit;
+};
 
 export default function Home() {
-  const [servers, setServers] = useState<any[]>([]);
-  const [currentServer, setCurrentServer] = useState("default");
-  const [newServerName, setNewServerName] = useState("");
-  const [userName, setUserName] = useState("");
-  const [currentRoom, setCurrentRoom] = useState("");
-  const [newRoomName, setNewRoomName] = useState("");
-  const [activeRooms, setActiveRooms] = useState<any[]>([]);
   const [isJoined, setIsJoined] = useState(false);
-  const [users, setUsers] = useState<any[]>([]);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSharingScreen, setIsSharingScreen] = useState(false);
-  
-  const [messages, setMessages] = useState<any[]>([]);
+  const [userName, setUserName] = useState("");
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [servers, setServers] = useState<ServerItem[]>([]);
+  const [currentServer, setCurrentServer] = useState("default");
+  const [currentRoom, setCurrentRoom] = useState("");
+  const [activeRooms, setActiveRooms] = useState<RoomItem[]>([]);
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [isNudged, setIsNudged] = useState(false);
-  
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string } | null>(null);
-  const [roomContextMenu, setRoomContextMenu] = useState<{ x: number, y: number, roomName: string } | null>(null);
-  const [userVolumes, setUserVolumes] = useState<{ [key: string]: number }>({});
-  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
-  const [roomSettingsOpen, setRoomSettingsOpen] = useState(false);
-  const [serverSettingsName, setServerSettingsName] = useState("");
-  const [serverSettingsDescription, setServerSettingsDescription] = useState("");
-  const [roomSettingsTarget, setRoomSettingsTarget] = useState("");
-  const [roomSettingsName, setRoomSettingsName] = useState("");
-  const [roomSettingsTopic, setRoomSettingsTopic] = useState("");
-  const [transferTarget, setTransferTarget] = useState("");
-  const [archivedServers, setArchivedServers] = useState<any[]>([]);
-  const [archivedRooms, setArchivedRooms] = useState<any[]>([]);
-  const [deployConfigWarning, setDeployConfigWarning] = useState<string | null>(null);
-  const [socketConnectionError, setSocketConnectionError] = useState<string | null>(null);
-  const [isSocketConnected, setIsSocketConnected] = useState(() => socket.connected);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
 
-  const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
-  const remoteAudios = useRef<{ [key: string]: HTMLAudioElement }>({}); 
   const localStream = useRef<MediaStream | null>(null);
-  const screenStream = useRef<MediaStream | null>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
+  const remoteAudios = useRef<{ [key: string]: HTMLAudioElement }>({});
+  const speakingIntervalRef = useRef<number | null>(null);
+  const isSpeakingRef = useRef(false);
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  const closePeerConnection = (peerId: string) => {
+    if (remoteAudios.current[peerId]) {
+      remoteAudios.current[peerId].pause();
+      remoteAudios.current[peerId].srcObject = null;
+      delete remoteAudios.current[peerId];
+    }
+    if (peerConnections.current[peerId]) {
+      peerConnections.current[peerId].close();
+      delete peerConnections.current[peerId];
+    }
+  };
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const host = window.location.hostname;
-    const isLocal = host === "localhost" || host === "127.0.0.1";
-    if (
-      !isLocal &&
-      (socketServerUrl.includes("localhost") || socketServerUrl.includes("127.0.0.1"))
-    ) {
-      setDeployConfigWarning(
-        "Vercel / üretim: Socket sunucusu adresi ayarlı değil. Vercel proje ayarlarına gerçek socket URL’sini NEXT_PUBLIC_SOCKET_SERVER_URL olarak ekleyip yeniden deploy edin. Socket backend’i ayrı bir sunucuda (Railway, Render, Fly vb.) çalıştırmanız gerekir."
-      );
+  const resetVoiceConnections = () => {
+    Object.keys(peerConnections.current).forEach((peerId) => closePeerConnection(peerId));
+  };
+
+  const stopSpeakingDetection = () => {
+    if (speakingIntervalRef.current) {
+      window.clearInterval(speakingIntervalRef.current);
+      speakingIntervalRef.current = null;
+    }
+    if (isSpeakingRef.current) {
+      isSpeakingRef.current = false;
+      socket.emit("speaking-status", false);
+    }
+  };
+
+  const startSpeakingDetection = () => {
+    if (!localStream.current || speakingIntervalRef.current) {
       return;
     }
-    if (!isLocal && window.location.protocol === "https:" && socketServerUrl.startsWith("http:")) {
-      setDeployConfigWarning(
-        "Sayfa HTTPS üzerinden açılıyor ama socket adresi HTTP. Tarayıcı engelleyebilir. NEXT_PUBLIC_SOCKET_SERVER_URL için https://… (TLS’li socket sunucusu) kullanın."
-      );
-      return;
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(localStream.current);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const buffer = new Uint8Array(analyser.frequencyBinCount);
+
+    speakingIntervalRef.current = window.setInterval(() => {
+      analyser.getByteFrequencyData(buffer);
+      const avg = buffer.reduce((sum, value) => sum + value, 0) / buffer.length;
+      const speakingNow = avg > 18 && !isMuted && !isDeafened;
+      if (speakingNow !== isSpeakingRef.current) {
+        isSpeakingRef.current = speakingNow;
+        socket.emit("speaking-status", speakingNow);
+      }
+    }, 250);
+  };
+
+  const createPeerConnection = (peerId: string) => {
+    if (peerConnections.current[peerId]) {
+      return peerConnections.current[peerId];
     }
-    setDeployConfigWarning(null);
-  }, []);
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    if (localStream.current) {
+      localStream.current.getTracks().forEach((track) => {
+        pc.addTrack(track, localStream.current as MediaStream);
+      });
+    }
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice-candidate", { candidate: event.candidate, to: peerId });
+      }
+    };
+
+    pc.ontrack = (event) => {
+      if (!remoteAudios.current[peerId]) {
+        const audio = new Audio();
+        audio.autoplay = true;
+        remoteAudios.current[peerId] = audio;
+      }
+      remoteAudios.current[peerId].srcObject = event.streams[0];
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (["closed", "failed", "disconnected"].includes(pc.connectionState)) {
+        closePeerConnection(peerId);
+      }
+    };
+
+    peerConnections.current[peerId] = pc;
+    return pc;
+  };
 
   useEffect(() => {
-    const onConnectError = (err: Error) => {
-      const base = err?.message || "Socket bağlantısı kurulamadı";
-      const t = String(base).toLowerCase();
-      let hint = "";
-      if (t.includes("404")) {
-        hint =
-          " — Railway’de `npm start` ile Next `PORT`ta ise `/socket.io` genelde Next’ten 404 döner; socket için `npm run start:socket:only` veya `INTERNAL_SOCKET_PROXY_URL` + aynı origin (bkz. README).";
-      } else if (t.includes("308") || t.includes("redirect")) {
-        hint =
-          " — 308: `NEXT_PUBLIC_SOCKET_SERVER_URL` yönlendirme yapmayan kanonik `https://…` adresi olmalı.";
+    const handleServerList = (list: ServerItem[]) => setServers(list);
+    const handleRoomList = (rooms: RoomItem[]) => setActiveRooms(rooms);
+    const handleUserList = (list: UserItem[]) => setUsers(list);
+    const handleMessageHistory = (list: ChatMessage[]) => setMessages(list);
+    const handleReceiveMessage = (message: ChatMessage) => {
+      setMessages((prev) => [...prev, message]);
+    };
+    const handleConnect = () => socket.emit("request-state");
+    const handleUserJoined = async (peerId: string) => {
+      if (!localStream.current || peerId === socket.id) {
+        return;
       }
-      setSocketConnectionError(base + hint);
-      setIsSocketConnected(false);
+      const pc = createPeerConnection(peerId);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("offer", { offer, to: peerId });
     };
-    const onConnectOk = () => {
-      setSocketConnectionError(null);
-      setIsSocketConnected(true);
-    };
-    const onDisconnect = () => setIsSocketConnected(false);
-    socket.on("connect_error", onConnectError);
-    socket.on("connect", onConnectOk);
-    socket.on("disconnect", onDisconnect);
-    setIsSocketConnected(socket.connected);
-    return () => {
-      socket.off("connect_error", onConnectError);
-      socket.off("connect", onConnectOk);
-      socket.off("disconnect", onDisconnect);
-    };
-  }, []);
-
-  useEffect(() => {
-    const onServerList = (serverList: any[]) => {
-      setServers(serverList);
-      if (!currentServer && serverList.length > 0) {
-        setCurrentServer(serverList[0].id);
-      }
-    };
-    const onRoomList = (rooms: any[]) => setActiveRooms(rooms);
-    const onArchivedServerList = (list: any[]) => setArchivedServers(list);
-    const onArchivedRoomList = (list: any[]) => setArchivedRooms(list);
-    const onUserList = (userList: any[]) => setUsers(userList);
-    const onReceiveMessage = (msg: any) => setMessages((prev) => [...prev, msg]);
-    const onMessageHistory = (history: any) => setMessages(history);
-    const onReceiveNudge = () => {
-      setIsNudged(true);
-      try {
-        new Audio("https://www.soundjay.com/buttons/beep-01a.mp3").play();
-      } catch (e) {}
-      setTimeout(() => setIsNudged(false), 500);
-    };
-    const onUserJoined = async (userId: string) => createPeer(userId, true);
-    const onUserLeft = (userId: string) => {
-      if (peerConnections.current[userId]) {
-        peerConnections.current[userId].close();
-        delete peerConnections.current[userId];
-        delete remoteAudios.current[userId];
-      }
-    };
-    const onOffer = async ({ offer, from }: { offer: RTCSessionDescriptionInit; from: string }) => {
-      const pc = createPeer(from, false);
+    const handleOffer = async ({ offer, from }: SignalPayload) => {
+      if (!offer) return;
+      const pc = createPeerConnection(from);
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit("answer", { answer, to: from });
     };
-    const onAnswer = async ({ answer, from }: { answer: RTCSessionDescriptionInit; from: string }) => {
+    const handleAnswer = async ({ answer, from }: SignalPayload) => {
+      if (!answer) return;
       const pc = peerConnections.current[from];
-      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    };
-    const onIceCandidate = async ({
-      candidate,
-      from,
-    }: {
-      candidate: RTCIceCandidateInit;
-      from: string;
-    }) => {
-      const pc = peerConnections.current[from];
-      if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
-    };
-    const onConnectRefreshState = () => {
-      socket.emit("request-state");
-    };
-
-    socket.on("server-list", onServerList);
-    socket.on("room-list", onRoomList);
-    socket.on("archived-server-list", onArchivedServerList);
-    socket.on("archived-room-list", onArchivedRoomList);
-    socket.on("user-list", onUserList);
-    socket.on("receive-message", onReceiveMessage);
-    socket.on("message-history", onMessageHistory);
-    socket.on("receive-nudge", onReceiveNudge);
-    socket.on("user-joined", onUserJoined);
-    socket.on("user-left", onUserLeft);
-    socket.on("offer", onOffer);
-    socket.on("answer", onAnswer);
-    socket.on("ice-candidate", onIceCandidate);
-    socket.on("connect", onConnectRefreshState);
-
-    if (socket.connected) {
-      socket.emit("request-state");
-    }
-
-    const closeMenu = () => {
-      setContextMenu(null);
-      setRoomContextMenu(null);
-    };
-    window.addEventListener("click", closeMenu);
-    return () => {
-      socket.off("server-list", onServerList);
-      socket.off("room-list", onRoomList);
-      socket.off("archived-server-list", onArchivedServerList);
-      socket.off("archived-room-list", onArchivedRoomList);
-      socket.off("user-list", onUserList);
-      socket.off("receive-message", onReceiveMessage);
-      socket.off("message-history", onMessageHistory);
-      socket.off("receive-nudge", onReceiveNudge);
-      socket.off("user-joined", onUserJoined);
-      socket.off("user-left", onUserLeft);
-      socket.off("offer", onOffer);
-      socket.off("answer", onAnswer);
-      socket.off("ice-candidate", onIceCandidate);
-      socket.off("connect", onConnectRefreshState);
-      window.removeEventListener("click", closeMenu);
-    };
-  }, [currentServer]);
-
-  const createPeer = (targetId: string, isInitiator: boolean) => {
-    if (peerConnections.current[targetId]) return peerConnections.current[targetId];
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-    
-    pc.onicecandidate = (e) => e.candidate && socket.emit("ice-candidate", { candidate: e.candidate, to: targetId });
-    pc.ontrack = (e) => {
-      if (e.track.kind === "video") {
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
-      } else {
-        const audio = new Audio();
-        audio.srcObject = e.streams[0];
-        audio.autoplay = true;
-        audio.volume = userVolumes[targetId] ?? 1.0;
-        remoteAudios.current[targetId] = audio;
-        document.body.appendChild(audio);
+      if (!pc) {
+        return;
       }
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    };
+    const handleIceCandidate = async ({ candidate, from }: SignalPayload) => {
+      if (!candidate) return;
+      const pc = peerConnections.current[from] ?? createPeerConnection(from);
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    };
+    const handleUserLeft = (peerId: string) => closePeerConnection(peerId);
+    const handleTypingStatus = ({ userName: typingUser, isTyping }: { userName: string; isTyping: boolean }) => {
+      setTypingUsers((prev) => {
+        if (isTyping) {
+          if (prev.includes(typingUser)) return prev;
+          return [...prev, typingUser];
+        }
+        return prev.filter((name) => name !== typingUser);
+      });
+    };
+    const handleRoomDeleted = ({ fallbackRoomName }: { fallbackRoomName: string }) => {
+      setCurrentRoom(fallbackRoomName);
     };
 
-    pc.onnegotiationneeded = async () => {
-        try {
-            if (isInitiator) {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit("offer", { offer, to: targetId });
-            }
-        } catch (err) {}
+    socket.on("server-list", handleServerList);
+    socket.on("room-list", handleRoomList);
+    socket.on("user-list", handleUserList);
+    socket.on("message-history", handleMessageHistory);
+    socket.on("receive-message", handleReceiveMessage);
+    socket.on("typing-status", handleTypingStatus);
+    socket.on("room-deleted", handleRoomDeleted);
+    socket.on("connect", handleConnect);
+    socket.on("user-joined", handleUserJoined);
+    socket.on("offer", handleOffer);
+    socket.on("answer", handleAnswer);
+    socket.on("ice-candidate", handleIceCandidate);
+    socket.on("user-left", handleUserLeft);
+
+    return () => {
+      socket.off("server-list", handleServerList);
+      socket.off("room-list", handleRoomList);
+      socket.off("user-list", handleUserList);
+      socket.off("message-history", handleMessageHistory);
+      socket.off("receive-message", handleReceiveMessage);
+      socket.off("typing-status", handleTypingStatus);
+      socket.off("room-deleted", handleRoomDeleted);
+      socket.off("connect", handleConnect);
+      socket.off("user-joined", handleUserJoined);
+      socket.off("offer", handleOffer);
+      socket.off("answer", handleAnswer);
+      socket.off("ice-candidate", handleIceCandidate);
+      socket.off("user-left", handleUserLeft);
+      resetVoiceConnections();
+      stopSpeakingDetection();
     };
+    // refs keep helper functions stable for this subscription lifecycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    localStream.current?.getTracks().forEach(t => pc.addTrack(t, localStream.current!));
-    if (screenStream.current) screenStream.current.getTracks().forEach(t => pc.addTrack(t, screenStream.current!));
-    
-    peerConnections.current[targetId] = pc;
-    return pc;
-  };
-
-  const handleContextMenu = (e: React.MouseEvent, userId: string) => {
-    e.preventDefault();
-    if (userId === socket.id) return;
-    setContextMenu({ x: e.pageX, y: e.pageY, userId });
-  };
+  useEffect(() => {
+    Object.values(remoteAudios.current).forEach((audio) => {
+      audio.muted = isDeafened;
+    });
+  }, [isDeafened]);
 
   const handleJoinRoom = async (roomName: string) => {
     if (!roomName.trim() || roomName === currentRoom) return;
-    setMessages([]);
-    Object.values(peerConnections.current).forEach(pc => pc.close());
-    peerConnections.current = {};
-    try {
-      if (!localStream.current) {
-        localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(localStream.current);
-        const analyser = audioContext.createAnalyser();
-        source.connect(analyser);
-        const checkVolume = () => {
-          const data = new Uint8Array(analyser.frequencyBinCount);
-          analyser.getByteFrequencyData(data);
-          const avg = data.reduce((a, b) => a + b, 0) / data.length;
-          socket.emit("speaking-status", avg > 12); 
-          requestAnimationFrame(checkVolume);
-        };
-        checkVolume();
-      }
-      socket.emit(
-        "join-room",
-        { roomId: roomName, userName, serverId: currentServer },
-        (res: any) => {
-          if (res?.ok) {
-            setCurrentRoom(roomName);
-          } else if (res?.error) {
-            alert(res.error);
-          }
-        }
-      );
-    } catch (err) { alert("Mikrofon hatası!"); }
-  };
+    if (!localStream.current) {
+      localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStream.current.getAudioTracks().forEach((track) => {
+        track.enabled = !isMuted;
+      });
+      startSpeakingDetection();
+    }
 
-  const createServer = () => {
-    const value = newServerName.trim();
-    if (!value) return;
-    socket.emit("create-server", { serverName: value, userName }, (res: any) => {
-      if (res?.ok && res.serverId) {
-        setCurrentServer(res.serverId);
-      } else if (res?.error) {
-        alert(res.error);
+    resetVoiceConnections();
+
+    socket.emit("join-room", { roomId: roomName, userName, serverId: currentServer }, (res: { ok?: boolean }) => {
+      if (res?.ok) {
+        setCurrentRoom(roomName);
+        setTypingUsers([]);
       }
     });
-    setNewServerName("");
   };
 
-  const createRoom = async () => {
-    const value = newRoomName.trim();
-    if (!value) return;
-    socket.emit(
-      "create-room",
-      { serverId: currentServer, roomName: value, userName },
-      async (res: any) => {
-        if (res?.ok) {
-          await handleJoinRoom(value);
-          setNewRoomName("");
-        } else if (res?.error) {
-          alert(res.error);
-        }
+  const handleCreateRoom = () => {
+    const roomName = prompt("Yeni kanal adı:");
+    if (!roomName?.trim()) return;
+    socket.emit("create-room", { serverId: currentServer, roomName: roomName.trim(), userName }, (res: { ok?: boolean; error?: string }) => {
+      if (!res?.ok) {
+        alert(res?.error || "Kanal oluşturulamadı.");
       }
-    );
+    });
   };
 
-  const updateServerSettings = () => {
-    socket.emit(
-      "update-server-settings",
-      {
-        serverId: currentServer,
-        actorUserName: userName,
-        name: serverSettingsName || currentServer,
-        description: serverSettingsDescription,
-      },
-      (res: any) => {
-        if (res?.ok) {
-          setServerSettingsOpen(false);
-        } else if (res?.error) {
-          alert(res.error);
-        }
+  const handleDeleteRoom = (roomName: string) => {
+    const ok = confirm(`#${roomName} kanalını silmek istediğine emin misin?`);
+    if (!ok) return;
+    socket.emit("delete-room", { serverId: currentServer, roomName, userName }, (res: { ok?: boolean; error?: string }) => {
+      if (!res?.ok) {
+        alert(res?.error || "Kanal silinemedi.");
       }
-    );
+    });
   };
 
-  const deleteServer = () => {
-    if (!confirm("Sunucuyu arşive al (soft delete)?")) return;
-    socket.emit(
-      "delete-server",
-      { serverId: currentServer, actorUserName: userName, targetUserName: userName },
-      (res: any) => {
-        if (res?.ok) {
-          setCurrentServer("default");
-          setCurrentRoom("");
-        } else if (res?.error) {
-          alert(res.error);
-        }
-      }
-    );
-  };
-
-  const openRoomSettings = (roomName: string) => {
-    setRoomSettingsTarget(roomName);
-    setRoomSettingsName(roomName);
-    setRoomSettingsTopic("");
-    setRoomSettingsOpen(true);
-  };
-
-  const updateRoomSettings = () => {
-    socket.emit(
-      "update-room-settings",
-      {
-        serverId: currentServer,
-        roomName: roomSettingsTarget,
-        actorUserName: userName,
-        name: roomSettingsName || roomSettingsTarget,
-        topic: roomSettingsTopic,
-      },
-      (res: any) => {
-        if (res?.ok) {
-          setRoomSettingsOpen(false);
-        } else if (res?.error) {
-          alert(res.error);
-        }
-      }
-    );
-  };
-
-  const transferOwnership = () => {
-    if (!transferTarget) return;
-    socket.emit(
-      "transfer-owner",
-      { serverId: currentServer, actorUserName: userName, targetUserName: transferTarget },
-      (res: any) => {
-        if (res?.ok) {
-          setTransferTarget("");
-          setServerSettingsOpen(false);
-        } else if (res?.error) {
-          alert(res.error);
-        }
-      }
-    );
-  };
-
-  const deleteRoom = (roomName: string) => {
-    if (!confirm(`"${roomName}" odasını arşive al?`)) return;
-    socket.emit(
-      "delete-room",
-      { serverId: currentServer, roomName, actorUserName: userName },
-      (res: any) => {
-        if (res?.ok && currentRoom === roomName) {
-          setCurrentRoom("");
-        } else if (!res?.ok && res?.error) {
-          alert(res.error);
-        }
-      }
-    );
-  };
-
-  const restoreServer = (serverId: string) => {
-    socket.emit(
-      "restore-server",
-      { serverId, actorUserName: userName, targetUserName: userName },
-      (res: any) => {
-        if (!res?.ok && res?.error) alert(res.error);
-      }
-    );
-  };
-
-  const restoreRoom = (serverId: string, roomName: string) => {
-    socket.emit(
-      "restore-room",
-      { serverId, roomName, actorUserName: userName },
-      (res: any) => {
-        if (!res?.ok && res?.error) alert(res.error);
-      }
-    );
-  };
-
-  const handleScreenShare = async () => {
-    if (!isSharingScreen) {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        screenStream.current = stream;
-        setIsSharingScreen(true);
-        socket.emit("share-screen-status", true);
-        Object.values(peerConnections.current).forEach(pc => {
-          stream.getVideoTracks().forEach(track => pc.addTrack(track, stream));
+  const toggleDeafen = () => {
+    const status = !isDeafened;
+    setIsDeafened(status);
+    if (status) {
+      setIsMuted(true);
+      if (localStream.current) {
+        localStream.current.getAudioTracks().forEach((track) => {
+          track.enabled = false;
         });
-        stream.getVideoTracks()[0].onended = () => stopScreenShare();
-      } catch (err) {}
-    } else { stopScreenShare(); }
+      }
+      socket.emit("mute-status", true);
+      socket.emit("speaking-status", false);
+    }
+    Object.values(remoteAudios.current).forEach((audio) => {
+      audio.muted = status;
+    });
   };
 
-  const stopScreenShare = () => {
-    screenStream.current?.getTracks().forEach(track => track.stop());
-    screenStream.current = null;
-    setIsSharingScreen(false);
-    socket.emit("share-screen-status", false);
-  };
-
-  const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newMessage.trim()) {
-      socket.emit("send-message", { text: newMessage }, (res: any) => {
-        if (!res?.ok && res?.error) {
-          alert(res.error);
-        }
+  const toggleMute = () => {
+    if (isDeafened) return;
+    const status = !isMuted;
+    setIsMuted(status);
+    if (localStream.current) {
+      localStream.current.getAudioTracks().forEach((track) => {
+        track.enabled = !status;
       });
-      setNewMessage("");
+    }
+    socket.emit("mute-status", status);
+    if (status) {
+      socket.emit("speaking-status", false);
     }
   };
 
-  const myRole =
-    users.find((u) => u.id === socket.id)?.role ||
-    users.find((u) => u.name === userName)?.role ||
-    "member";
-  const filteredRooms = activeRooms.filter(
-    (room) => (room.serverId || "default") === currentServer
-  );
-  const roomsToRender = filteredRooms.length > 0 ? filteredRooms : activeRooms;
+  const sendMessage = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentRoom || !newMessage.trim()) return;
+    socket.emit("send-message", { text: newMessage.trim() }, (res: { ok?: boolean }) => {
+      if (res?.ok) {
+        setNewMessage("");
+        socket.emit("typing-status", { roomId: currentRoom, serverId: currentServer, userName, isTyping: false });
+      }
+    });
+  };
 
-  const connectionBanner =
-    deployConfigWarning || (!isSocketConnected && socketConnectionError) ? (
-      <div className="bg-amber-900/90 text-amber-100 text-xs font-bold px-4 py-3 border-b border-amber-700 shrink-0">
-        {deployConfigWarning ||
-          `Socket: ${socketConnectionError} — CORS için Railway’de ALLOWED_ORIGINS (ör. tam Vercel URL + isteğe bağlı https://*.vercel.app).`}
-      </div>
-    ) : null;
+  const handleMessageInput = (value: string) => {
+    setNewMessage(value);
+    if (!currentRoom) return;
+    socket.emit("typing-status", { roomId: currentRoom, serverId: currentServer, userName, isTyping: value.trim().length > 0 });
+  };
 
-  if (!isJoined) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col text-white font-sans">
-        {connectionBanner}
-        <div className="flex flex-1 items-center justify-center p-6">
-        <div className="w-full max-w-sm bg-slate-900 p-10 rounded-[40px] shadow-2xl border border-slate-800">
-          <h1 className="text-4xl font-black text-rose-500 text-center mb-8 tracking-tighter cursor-default">Dumbasscord</h1>
-          <input 
-            type="text" placeholder="Takma Adınız" 
-            className="w-full p-5 bg-slate-800 border border-slate-700 rounded-3xl outline-none text-center text-lg font-bold text-white focus:border-rose-500 placeholder:text-slate-500 transition-all"
-            value={userName} onChange={(e) => setUserName(e.target.value)}
-          />
-          <button onClick={() => userName.trim() && setIsJoined(true)} className="w-full mt-6 bg-rose-600 text-white p-5 rounded-3xl font-black text-lg hover:bg-rose-700 transform active:scale-95 transition-all shadow-lg">BAĞLAN</button>
-        </div>
-        </div>
-      </div>
-    );
-  }
+  const handleServerChange = (nextServerId: string) => {
+    setCurrentServer(nextServerId);
+    setCurrentRoom("");
+    setUsers([]);
+    setMessages([]);
+    setTypingUsers([]);
+    resetVoiceConnections();
+  };
+
+  const typingLabel = typingUsers.length
+    ? `${typingUsers.slice(0, 2).join(", ")} yazıyor${typingUsers.length > 2 ? "..." : ""}`
+    : "";
+
+  if (!isJoined) return <AuthContainer onJoin={(_email: string, n: string) => { setUserName(n); setIsJoined(true); }} />;
 
   return (
-    <div className={`flex flex-col h-screen bg-slate-950 text-white font-sans overflow-hidden transition-all duration-100 ${isNudged ? 'translate-x-2 translate-y-2 scale-[1.01]' : ''}`}>
-      {connectionBanner}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-      {/* SIDEBAR */}
-      <div className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
-        <div className="p-6 border-b border-slate-800">
-          <h1 className="text-2xl font-black text-rose-500 tracking-tighter">Dumbasscord</h1>
-          <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 tracking-widest">{userName}</p>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <div>
-            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Odalar</h3>
-            <div className="space-y-1">
-              {roomsToRender.map(room => (
-                <button key={`${room.serverId || "default"}:${room.name}`} onContextMenu={(e) => { e.preventDefault(); if (myRole === "owner" || myRole === "admin" || myRole === "mod") setRoomContextMenu({ x: e.pageX, y: e.pageY, roomName: room.name }); }} onClick={() => handleJoinRoom(room.name)} className={`w-full flex items-center justify-between p-3 rounded-2xl transition-all font-bold text-sm transform hover:scale-105 active:scale-95 duration-200 ${currentRoom === room.name ? 'bg-sky-600 text-white shadow-lg' : 'text-slate-300 hover:bg-slate-800'}`}>
-                  <span># {room.name}</span>
-                  <span className="text-[10px] bg-slate-700 px-2 rounded-full">{room.count}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Sunucular</h3>
-            <div className="space-y-1">
-              {servers.map((server) => (
-                <button key={server.id} onClick={() => setCurrentServer(server.id)} className={`w-full text-left p-3 rounded-2xl text-xs font-bold transition-all ${currentServer === server.id ? "bg-rose-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}>
-                  {server.name}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2 px-2 mt-2">
-              <input type="text" placeholder="Sunucu adı..." className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs outline-none focus:border-rose-500 transition-colors" value={newServerName} onChange={(e) => setNewServerName(e.target.value)} />
-              <button onClick={createServer} className="bg-rose-600 text-white px-3 rounded-xl font-bold text-xs transform hover:scale-125 active:scale-90 transition-all shadow-lg">+</button>
-            </div>
-            {(myRole === "owner" || myRole === "admin") && (
-              <div className="flex gap-2 px-2 mt-2">
-                <button onClick={() => { const selected = servers.find((s) => s.id === currentServer); setServerSettingsName(selected?.name || currentServer); setServerSettingsDescription(selected?.description || ""); setServerSettingsOpen(true); }} className="flex-1 bg-slate-800 text-xs rounded-xl p-2 font-bold">Sunucu Ayarları</button>
-                {myRole === "owner" && (
-                  <button onClick={deleteServer} className="bg-rose-700 text-xs rounded-xl p-2 font-bold">Sil</button>
-                )}
-              </div>
-            )}
-            {archivedServers.length > 0 && (
-              <div className="mt-3 px-2">
-                <h4 className="text-[9px] font-black uppercase text-slate-500 mb-2">Arşiv Sunucular</h4>
-                <div className="space-y-1">
-                  {archivedServers.map((server) => (
-                    <button key={`archived:${server.id}`} onClick={() => restoreServer(server.id)} className="w-full text-left p-2 rounded-xl text-[10px] bg-slate-800 hover:bg-slate-700">
-                      Geri Al: {server.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <div>
-            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Yeni Oda</h3>
-            <div className="flex gap-2 px-2">
-               <input type="text" placeholder="Oda adı..." className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs outline-none focus:border-rose-500 transition-colors" value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} />
-              <button onClick={createRoom} className="bg-rose-600 text-white px-3 rounded-xl font-bold text-xs transform hover:scale-125 active:scale-90 transition-all shadow-lg">+</button>
-            </div>
-          </div>
-          {archivedRooms.filter((room) => room.serverId === currentServer).length > 0 && (
-            <div>
-              <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Arşiv Odalar</h3>
-              <div className="space-y-1 px-2">
-                {archivedRooms
-                  .filter((room) => room.serverId === currentServer)
-                  .map((room) => (
-                    <button key={`archived-room:${room.serverId}:${room.name}`} onClick={() => restoreRoom(room.serverId, room.name)} className="w-full text-left p-2 rounded-xl text-[10px] bg-slate-800 hover:bg-slate-700">
-                      Geri Al: {room.name}
-                    </button>
-                  ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="p-4 bg-slate-800/50 border-t border-slate-800 space-y-3">
-          <button onClick={() => { const t = localStream.current?.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; socket.emit("mute-status", !t.enabled); } setIsMuted(!isMuted); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transform hover:scale-105 active:scale-95 transition-all ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>
-            {isMuted ? "Mikrofonu Aç" : "Mikrofonu Kapat"}
-          </button>
-          <button onClick={() => socket.emit("send-nudge")} className="w-full p-4 bg-amber-500 rounded-2xl font-black text-[10px] uppercase hover:bg-amber-600 transform hover:scale-105 active:scale-95 transition-all text-slate-900 shadow-lg">Dürt! (Herkesi)</button>
-        </div>
-      </div>
+    <div className="flex h-screen max-h-screen bg-slate-950 text-white font-sans overflow-hidden">
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        userData={{ name: userName, bio: "" }}
+        onSave={(newData: { name: string }) => {
+          setUserName(newData.name);
+          setIsProfileOpen(false);
+        }}
+      />
 
-      {/* ANA PANEL */}
-      <div className="flex-1 flex bg-slate-950">
-        {!currentRoom ? (
-          <div className="flex-1 flex items-center justify-center text-slate-500 italic">Dumbasscord'a hoş geldin!</div>
-        ) : (
-          <>
-            <div className="flex-1 flex flex-col border-r border-slate-800 relative">
-              <div className="p-6 border-b border-slate-800 bg-slate-900/30 flex justify-between items-center">
-                <h2 className="font-black text-xl uppercase tracking-tight"># {currentRoom}</h2>
-                <button onClick={handleScreenShare} className={`flex items-center gap-2 text-[10px] px-4 py-2 rounded-full font-black uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isSharingScreen ? 'bg-rose-600 border border-rose-400 animate-pulse' : 'bg-slate-800 border border-slate-700 hover:border-rose-500 text-slate-200'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${isSharingScreen ? 'bg-white' : 'bg-rose-500'}`}></span>
-                    {isSharingScreen ? "Yayını Durdur" : "Ekran Paylaş"}
-                </button>
-              </div>
-              
-              <div className="flex-1 p-8 overflow-y-auto flex flex-col gap-6">
-                {users.some(u => u.isSharingScreen) && (
-                    <div className="w-full aspect-video bg-black rounded-[40px] overflow-hidden border-4 border-rose-600/20 shadow-2xl relative">
-                        <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-contain" />
-                        <div className="absolute top-6 left-6 bg-rose-600 px-4 py-2 rounded-full text-[10px] font-black uppercase animate-pulse shadow-xl">CANLI YAYIN</div>
-                    </div>
-                )}
-                
-                {/* LİSTE DÜZENİ: SABİT GENİŞLİKLİ KARTLAR */}
-                <div className="flex flex-col gap-3">
-                  {users.map((u) => (
-                    <div 
-                      key={u.id} 
-                      onContextMenu={(e) => handleContextMenu(e, u.id)} 
-                      // w-80 eklenerek kart boyutu sabitlendi
-                      className={`p-4 rounded-3xl border-4 flex items-center gap-5 transition-all duration-300 relative cursor-context-menu w-80 ${u.isSpeaking ? 'border-sky-500 bg-sky-950/20' : 'border-slate-800 bg-slate-900'} shadow-lg`}
-                    >
-                      {u.isMuted && (
-                        <div className="absolute top-3 right-4 bg-rose-600/20 p-1.5 rounded-full border border-rose-500/40 shadow-inner z-20">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                              <line x1="1" y1="1" x2="23" y2="23" />
-                            </svg>
-                        </div>
-                      )}
+      <ServerList servers={servers} currentServer={currentServer} setCurrentServer={handleServerChange} socket={socket} userName={userName} />
 
-                      <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black shrink-0 transition-all duration-300 ${u.isSpeaking ? 'bg-sky-600 text-white shadow-lg' : 'bg-slate-700 text-slate-400'}`}>
-                        {u.name ? u.name[0].toUpperCase() : "?"}
-                      </div>
+      <div className="w-72 min-w-72 h-full flex flex-col border-r border-slate-800">
+        <ChannelList
+          rooms={activeRooms.filter((r) => (r.serverId || "default") === currentServer)}
+          currentRoom={currentRoom}
+          handleJoinRoom={handleJoinRoom}
+          handleCreateRoom={handleCreateRoom}
+          handleDeleteRoom={handleDeleteRoom}
+          currentUserId={socket.id || ""}
+          users={users}
+          userName={userName}
+          setIsJoined={setIsJoined}
+          onOpenProfile={() => setIsProfileOpen(true)}
+        />
 
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-black text-base text-slate-200 tracking-tight leading-none uppercase truncate">
-                          {u.name} {u.id === socket.id && <span className="text-sky-500 text-[10px] ml-1">(SEN)</span>}
-                        </span>
-                        {u.role && <span className="text-[8px] text-amber-400 uppercase font-black">{u.role}</span>}
-                        {u.isSharingScreen && <div className="text-[8px] mt-1 bg-rose-600 w-fit px-1.5 py-0.5 rounded-full font-black animate-pulse">YAYINDA</div>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* CHAT PANELİ */}
-            <div className="w-80 flex flex-col bg-slate-900/50 backdrop-blur-md shrink-0">
-              <div className="p-4 border-b border-slate-800 font-black text-[10px] uppercase text-slate-500 bg-slate-900/20 tracking-widest">Sohbet</div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
-                {messages.map((msg, i) => (
-                  <div key={i} className={`flex flex-col ${msg.sender === userName ? 'items-end' : 'items-start'}`}>
-                    <span className="text-[9px] font-black text-rose-500 uppercase tracking-tighter mb-1 px-1">{msg.sender}</span>
-                    <div className={`px-4 py-2 rounded-2xl text-sm max-w-[90%] break-words shadow-sm ${msg.sender === userName ? 'bg-sky-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-300 rounded-tl-none'}`}>
-                      {msg.text}
-                    </div>
-                  </div>
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-              <form onSubmit={sendMessage} className="p-4 border-t border-slate-800 flex gap-2 bg-slate-900/20">
-                <input type="text" placeholder="Mesaj yaz..." className="flex-1 bg-slate-800 border border-slate-700 rounded-2xl px-4 py-2 text-xs outline-none focus:border-rose-500 placeholder:text-slate-600 transition-all" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
-                <button type="submit" className="bg-rose-600 text-white w-10 h-10 rounded-2xl font-bold hover:scale-110 active:scale-90 transition-all shadow-lg flex items-center justify-center">❯</button>
-              </form>
-            </div>
-          </>
-        )}
+        <ControlBar isMuted={isMuted} isDeafened={isDeafened} toggleMute={toggleMute} toggleDeafen={toggleDeafen} />
       </div>
       </div>
 
-      {/* SAĞ TIK MENÜSÜ */}
-      {contextMenu && (
-        <div className="fixed z-50 bg-slate-900 border border-slate-700 shadow-2xl rounded-2xl p-2 w-48 font-sans" style={{ top: contextMenu.y, left: contextMenu.x }}>
-          <button onClick={() => { socket.emit("send-nudge", contextMenu.userId); setContextMenu(null); }} className="w-full text-left p-3 hover:bg-amber-500 hover:text-slate-900 rounded-xl text-xs font-black transition-all mb-1">👉 DÜRT!</button>
-          {myRole === "owner" && (
-            <>
-              <button onClick={() => {
-                const target = users.find((u) => u.id === contextMenu.userId);
-                if (!target) return;
-                socket.emit("promote-user", { serverId: currentServer, actorUserName: userName, targetUserName: target.name });
-                setContextMenu(null);
-              }} className="w-full text-left p-3 hover:bg-emerald-500 hover:text-slate-900 rounded-xl text-xs font-black transition-all mb-1">⬆️ Admin Yap</button>
-              <button onClick={() => {
-                const target = users.find((u) => u.id === contextMenu.userId);
-                if (!target) return;
-                socket.emit("demote-user", { serverId: currentServer, actorUserName: userName, targetUserName: target.name });
-                setContextMenu(null);
-              }} className="w-full text-left p-3 hover:bg-rose-500 hover:text-white rounded-xl text-xs font-black transition-all mb-1">⬇️ Admin Al</button>
-              <button onClick={() => {
-                const target = users.find((u) => u.id === contextMenu.userId);
-                if (!target) return;
-                socket.emit("transfer-owner", { serverId: currentServer, actorUserName: userName, targetUserName: target.name });
-                setContextMenu(null);
-              }} className="w-full text-left p-3 hover:bg-violet-500 hover:text-white rounded-xl text-xs font-black transition-all mb-1">👑 Sahipliği Devret</button>
-            </>
-          )}
-          <div className="p-3 border-t border-slate-800">
-            <label className="text-[9px] font-black text-slate-500 uppercase block mb-2">Kullanıcı Sesi</label>
-            <input type="range" min="0" max="1" step="0.1" className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500" value={userVolumes[contextMenu.userId] ?? 1} onChange={(e) => {
-                const vol = parseFloat(e.target.value);
-                setUserVolumes(prev => ({ ...prev, [contextMenu!.userId]: vol }));
-                if (remoteAudios.current[contextMenu!.userId]) remoteAudios.current[contextMenu!.userId].volume = vol;
-            }} />
-          </div>
-        </div>
-      )}
-
-      {roomContextMenu && (
-        <div className="fixed z-50 bg-slate-900 border border-slate-700 shadow-2xl rounded-2xl p-2 w-52 font-sans" style={{ top: roomContextMenu.y, left: roomContextMenu.x }}>
-          <button
-            onClick={() => {
-              openRoomSettings(roomContextMenu.roomName);
-              setRoomContextMenu(null);
-            }}
-            className="w-full text-left p-3 hover:bg-sky-600 hover:text-white rounded-xl text-xs font-black transition-all mb-1"
-          >
-            Oda Ayarları
-          </button>
-          {(myRole === "owner" || myRole === "admin") && (
-            <button
-              onClick={() => {
-                deleteRoom(roomContextMenu.roomName);
-                setRoomContextMenu(null);
-              }}
-              className="w-full text-left p-3 hover:bg-rose-600 hover:text-white rounded-xl text-xs font-black transition-all"
-            >
-              Odayı Arşivle (Sil)
-            </button>
-          )}
-        </div>
-      )}
-
-      {serverSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-4 shadow-2xl">
-            <h3 className="text-sm font-black uppercase text-slate-200 tracking-wide">Sunucu Ayarları</h3>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-black text-slate-500">Sunucu adı</label>
-              <input value={serverSettingsName} onChange={(e) => setServerSettingsName(e.target.value)} placeholder="Sunucu adı" className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-black text-slate-500">Açıklama</label>
-              <textarea value={serverSettingsDescription} onChange={(e) => setServerSettingsDescription(e.target.value)} placeholder="Sunucu açıklaması" className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs min-h-20" />
-            </div>
-            <div className="flex gap-2">
-              <button onClick={updateServerSettings} className="flex-1 bg-sky-600 rounded-xl p-2 text-xs font-bold">Kaydet</button>
-              <button onClick={() => setServerSettingsOpen(false)} className="bg-slate-700 rounded-xl p-2 text-xs font-bold">Kapat</button>
-            </div>
-            {myRole === "owner" && (
-              <div className="border-t border-slate-700 pt-3 space-y-2">
-                <label className="text-[10px] uppercase text-slate-400 font-bold">Sahiplik Devri</label>
-                <select value={transferTarget} onChange={(e) => setTransferTarget(e.target.value)} className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs">
-                  <option value="">Kullanıcı seç</option>
-                  {users
-                    .filter((u) => u.id !== socket.id)
-                    .map((u) => (
-                      <option key={`transfer:${u.id}`} value={u.name}>{u.name}</option>
-                    ))}
-                </select>
-                <button onClick={transferOwnership} className="w-full bg-violet-600 rounded-xl p-2 text-xs font-bold">Sahipliği Devret</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {roomSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-4 shadow-2xl">
-            <h3 className="text-sm font-black uppercase text-slate-200 tracking-wide">Oda Ayarları</h3>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-black text-slate-500">Oda adı</label>
-              <input value={roomSettingsName} onChange={(e) => setRoomSettingsName(e.target.value)} placeholder="Oda adı" className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-black text-slate-500">Konu</label>
-              <textarea value={roomSettingsTopic} onChange={(e) => setRoomSettingsTopic(e.target.value)} placeholder="Oda konusu" className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs min-h-20" />
-            </div>
-            <div className="flex gap-2">
-              <button onClick={updateRoomSettings} className="flex-1 bg-sky-600 rounded-xl p-2 text-xs font-bold">Kaydet</button>
-              <button onClick={() => setRoomSettingsOpen(false)} className="bg-slate-700 rounded-xl p-2 text-xs font-bold">Kapat</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="flex-1 flex bg-slate-950 p-4 md:p-8 overflow-y-auto min-w-0">
+        <ChatArea
+          messages={messages}
+          newMessage={newMessage}
+          setNewMessage={handleMessageInput}
+          sendMessage={sendMessage}
+          userName={userName}
+          currentRoom={currentRoom}
+          typingLabel={typingLabel}
+        />
+      </div>
     </div>
-  ); 
+  );
 }

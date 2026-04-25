@@ -8,7 +8,7 @@ const { MemoryState } = require("./state/memoryState");
 async function createRealtimeServer(env) {
   const state = new MemoryState();
   const store = await createStore(env);
-  const httpServer = createHttpServer();
+  const httpServer = createHttpServer({ store, env });
   const io = new Server(httpServer, {
     path: env.socketPath,
     cors: {
