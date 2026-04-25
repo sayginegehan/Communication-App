@@ -157,6 +157,20 @@ function createHttpServer({ store, env }) {
       return;
     }
 
+    if (req.url === "/__backend-signature") {
+      json(
+        res,
+        200,
+        {
+          service: "dumbasscord-socket-backend",
+          authRoutes: ["/auth/register", "/auth/login"],
+          corsOrigins: env.allowedOrigins,
+        },
+        corsHeaders
+      );
+      return;
+    }
+
     if (req.method === "POST" && req.url === "/auth/register") {
       try {
         await handleRegister(req, res, store, corsHeaders);
