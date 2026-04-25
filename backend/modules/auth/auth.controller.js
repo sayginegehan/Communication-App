@@ -17,6 +17,15 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+const updateProfileSchema = z.object({
+  userName: z.string().trim().min(2).max(30).optional(),
+  avatarUrl: z
+    .union([z.string().trim().url().max(2048), z.literal(""), z.null()])
+    .optional(),
+  bio: z.string().max(500).optional(),
+  status: z.enum(["online", "idle", "dnd"]).optional(),
+});
+
 function setAuthCookie(res, token) {
   res.cookie(JWT_COOKIE_NAME, token, {
     httpOnly: true,
@@ -39,6 +48,9 @@ function toAuthResponseUser(user) {
     id: user.id,
     email: user.email,
     userName: user.userName,
+    avatarUrl: user.avatarUrl || null,
+    bio: user.bio || "",
+    status: user.status || "online",
   };
 }
 
@@ -113,6 +125,16 @@ async function refresh(req, res) {
   res.json({ user: toAuthResponseUser(user), token });
 }
 
+async function updateProfile(req, res) {
+  try {
+    const payload = updateProfileSchema.parse(req.body);
+    const user = await authService.updateProfile(req.auth.sub, payload);
+    res.json({ user: toAuthResponseUser(user) });
+  } catch (error) {
+    res.status(statusFromError(error)).json({ error: error.message });
+  }
+}
+
 function logout(_req, res) {
   clearAuthCookie(res);
   res.json({ ok: true });
@@ -123,5 +145,6 @@ module.exports = {
   login,
   me,
   refresh,
+  updateProfile,
   logout,
 };

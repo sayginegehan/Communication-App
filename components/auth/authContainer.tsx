@@ -2,7 +2,14 @@
 import { useState } from "react";
 
 interface AuthProps {
-  onJoin: (email: string, userName: string) => void;
+  onJoin: (
+    email: string,
+    userName: string,
+    token?: string,
+    avatarUrl?: string | null,
+    bio?: string,
+    status?: "online" | "idle" | "dnd"
+  ) => void;
 }
 
 const socketServerUrl =
@@ -45,7 +52,14 @@ export default function AuthContainer({ onJoin }: AuthProps) {
       if (!response.ok) {
         throw new Error(result.error || "Kimlik doğrulama başarısız.");
       }
-      onJoin(result.user.email, result.user.userName);
+      onJoin(
+        result.user.email,
+        result.user.userName,
+        result.token,
+        result.user.avatarUrl,
+        result.user.bio,
+        result.user.status
+      );
     } catch (requestError) {
       setError(
         requestError instanceof Error

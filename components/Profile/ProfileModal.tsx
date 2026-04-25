@@ -4,6 +4,7 @@ import React, { useState } from "react";
 type ProfileData = {
   name: string;
   bio: string;
+  avatarUrl?: string | null;
   status?: "online" | "idle" | "dnd";
 };
 
@@ -17,6 +18,7 @@ interface ProfileModalProps {
 export default function ProfileModal({ isOpen, onClose, userData, onSave }: ProfileModalProps) {
   const [bio, setBio] = useState(userData.bio || "");
   const [name, setName] = useState(userData.name || "");
+  const [avatarUrl, setAvatarUrl] = useState(userData.avatarUrl || "");
   const [status, setStatus] = useState<ProfileData["status"]>("online");
   const statuses: Array<NonNullable<ProfileData["status"]>> = ["online", "idle", "dnd"];
 
@@ -34,7 +36,16 @@ export default function ProfileModal({ isOpen, onClose, userData, onSave }: Prof
           {/* Avatar Düzenleme */}
           <div className="relative inline-block group">
             <div className="w-24 h-24 rounded-3xl bg-slate-800 border-4 border-slate-900 flex items-center justify-center text-4xl font-black text-white shadow-xl overflow-hidden">
-              {name[0]?.toUpperCase()}
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt="Profil fotoğrafı"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                name[0]?.toUpperCase()
+              )}
             </div>
             <div className="absolute inset-0 bg-black/40 rounded-3xl opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-all">
               <span className="text-[10px] font-black uppercase">Değiştir</span>
@@ -43,6 +54,17 @@ export default function ProfileModal({ isOpen, onClose, userData, onSave }: Prof
 
           <div className="mt-6 space-y-5">
             {/* İsim Düzenleme */}
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Profil Foto URL</label>
+              <input
+                type="url"
+                value={avatarUrl}
+                onChange={(e) => setAvatarUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3 mt-1 text-sm text-white focus:border-rose-500 outline-none transition-all"
+              />
+            </div>
+
             <div>
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Kullanıcı Adı</label>
               <input 
@@ -92,7 +114,7 @@ export default function ProfileModal({ isOpen, onClose, userData, onSave }: Prof
               İptal
             </button>
             <button 
-              onClick={() => onSave({ name, bio, status })}
+              onClick={() => onSave({ name, bio, status, avatarUrl })}
               className="flex-[2] p-4 rounded-2xl text-[12px] font-black uppercase bg-sky-600 text-white shadow-lg hover:scale-105 active:scale-95 transition-all"
             >
               Değişiklikleri Kaydet

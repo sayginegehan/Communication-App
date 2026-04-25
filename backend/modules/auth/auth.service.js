@@ -36,9 +36,19 @@ async function register({ email, userName, password }) {
       data: {
         email: normalizeEmail(email),
         userName: String(userName || "").trim(),
+        avatarUrl: null,
+        bio: "",
+        status: "online",
         passwordHash,
       },
-      select: { id: true, email: true, userName: true },
+      select: {
+        id: true,
+        email: true,
+        userName: true,
+        avatarUrl: true,
+        bio: true,
+        status: true,
+      },
     });
     return user;
   } catch (error) {
@@ -72,14 +82,49 @@ async function login({ email, password }) {
     }
   }
   if (!valid) return null;
-  return { id: user.id, email: user.email, userName: user.userName };
+  return {
+    id: user.id,
+    email: user.email,
+    userName: user.userName,
+    avatarUrl: user.avatarUrl,
+    bio: user.bio || "",
+    status: user.status || "online",
+  };
 }
 
 async function getMe(userId) {
   const prisma = getPrismaClient();
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, userName: true },
+    select: {
+      id: true,
+      email: true,
+      userName: true,
+      avatarUrl: true,
+      bio: true,
+      status: true,
+    },
+  });
+}
+
+async function updateProfile(userId, { userName, avatarUrl, bio, status }) {
+  const prisma = getPrismaClient();
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(typeof userName === "string" ? { userName: userName.trim() } : {}),
+      ...(typeof avatarUrl === "string" ? { avatarUrl: avatarUrl.trim() || null } : {}),
+      ...(typeof bio === "string" ? { bio } : {}),
+      ...(typeof status === "string" ? { status } : {}),
+    },
+    select: {
+      id: true,
+      email: true,
+      userName: true,
+      avatarUrl: true,
+      bio: true,
+      status: true,
+    },
   });
 }
 
@@ -87,4 +132,5 @@ module.exports = {
   register,
   login,
   getMe,
+  updateProfile,
 };

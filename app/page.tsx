@@ -29,11 +29,25 @@ type SignalPayload = {
   answer?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
 };
+type ProfileStatus = "online" | "idle" | "dnd";
+type ProfileState = {
+  name: string;
+  bio: string;
+  avatarUrl?: string | null;
+  status: ProfileStatus;
+};
 
 export default function Home() {
   const [isJoined, setIsJoined] = useState(false);
   const [userName, setUserName] = useState("");
+  const [authToken, setAuthToken] = useState("");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profile, setProfile] = useState<ProfileState>({
+    name: "",
+    bio: "",
+    avatarUrl: null,
+    status: "online",
+  });
   const [servers, setServers] = useState<ServerItem[]>([]);
   const [currentServer, setCurrentServer] = useState("default");
   const [currentRoom, setCurrentRoom] = useState("");
@@ -337,18 +351,82 @@ export default function Home() {
     ? `${typingUsers.slice(0, 2).join(", ")} yazıyor${typingUsers.length > 2 ? "..." : ""}`
     : "";
 
-  if (!isJoined) return <AuthContainer onJoin={(_email: string, n: string) => { setUserName(n); setIsJoined(true); }} />;
+  const handleProfileSave = async (newData: {
+    name: string;
+    bio: string;
+    status?: ProfileStatus;
+    avatarUrl?: string | null;
+  }) => {
+    try {
+      const response = await fetch(`${socketServerUrl}/auth/profile`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          userName: newData.name,
+          bio: newData.bio,
+          status: newData.status || "online",
+          avatarUrl: newData.avatarUrl || "",
+        }),
+        credentials: "include",
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Profil güncellenemedi.");
+      }
+      const updated = payload.user;
+      setUserName(updated.userName);
+      setProfile({
+        name: updated.userName,
+        bio: updated.bio || "",
+        avatarUrl: updated.avatarUrl || null,
+        status: (updated.status || "online") as ProfileStatus,
+      });
+      setIsProfileOpen(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Profil güncellenemedi.");
+    }
+  };
+
+  if (!isJoined) {
+    return (
+      <AuthContainer
+        onJoin={(
+          _email: string,
+          n: string,
+          token?: string,
+          avatarUrl?: string | null,
+          bio?: string,
+          status?: ProfileStatus
+        ) => {
+          setUserName(n);
+          setAuthToken(token || "");
+          setProfile({
+            name: n,
+            bio: bio || "",
+            avatarUrl: avatarUrl || null,
+            status: status || "online",
+          });
+          setIsJoined(true);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen max-h-screen bg-slate-950 text-white font-sans overflow-hidden">
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
-        userData={{ name: userName, bio: "" }}
-        onSave={(newData: { name: string }) => {
-          setUserName(newData.name);
-          setIsProfileOpen(false);
+        userData={{
+          name: profile.name || userName,
+          bio: profile.bio,
+          avatarUrl: profile.avatarUrl,
+          status: profile.status,
         }}
+        onSave={handleProfileSave}
       />
 
       <ServerList servers={servers} currentServer={currentServer} setCurrentServer={handleServerChange} socket={socket} userName={userName} />
@@ -368,7 +446,6 @@ export default function Home() {
         />
 
         <ControlBar isMuted={isMuted} isDeafened={isDeafened} toggleMute={toggleMute} toggleDeafen={toggleDeafen} />
-      </div>
       </div>
 
       <div className="flex-1 flex bg-slate-950 p-4 md:p-8 overflow-y-auto min-w-0">
