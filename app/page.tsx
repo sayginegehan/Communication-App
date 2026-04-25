@@ -16,9 +16,9 @@ const socket = io(socketServerUrl, {
 });
 
 export default function Home() {
-  // AUTH VE PANEL DURUMLARI
-  const [isLoginActive, setIsLoginActive] = useState(true); // Panel kaydırma kontrolü
-  const [isJoined, setIsJoined] = useState(false); // Chat'e giriş kontrolü
+  // AUTH DURUMLARI
+  const [isLoginActive, setIsLoginActive] = useState(true); 
+  const [isJoined, setIsJoined] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [userName, setUserName] = useState("");
@@ -36,7 +36,6 @@ export default function Home() {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isNudged, setIsNudged] = useState(false);
-  
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string } | null>(null);
   const [userVolumes, setUserVolumes] = useState<{ [key: string]: number }>({});
 
@@ -54,9 +53,7 @@ export default function Home() {
   useEffect(() => {
     socket.on("server-list", (serverList) => {
       setServers(serverList);
-      if (!currentServer && serverList.length > 0) {
-        setCurrentServer(serverList[0].id);
-      }
+      if (!currentServer && serverList.length > 0) setCurrentServer(serverList[0].id);
     });
     socket.on("room-list", (rooms) => setActiveRooms(rooms));
     socket.on("user-list", (userList) => setUsers(userList));
@@ -96,13 +93,8 @@ export default function Home() {
       if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
-    socket.on("connect", () => {
-      socket.emit("request-state");
-    });
-
-    if (socket.connected) {
-      socket.emit("request-state");
-    }
+    socket.on("connect", () => socket.emit("request-state"));
+    if (socket.connected) socket.emit("request-state");
 
     const closeMenu = () => setContextMenu(null);
     window.addEventListener("click", closeMenu);
@@ -144,7 +136,6 @@ export default function Home() {
     return pc;
   };
 
-  // HATA VEREN FONKSİYON BURADA:
   const handleContextMenu = (e: React.MouseEvent, userId: string) => {
     e.preventDefault();
     if (userId === socket.id) return;
@@ -242,16 +233,15 @@ export default function Home() {
   if (!isJoined) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 font-sans overflow-hidden">
-        <div className="relative w-full max-w-[900px] h-[600px] bg-slate-900 rounded-[60px] overflow-hidden shadow-2xl border border-slate-800 flex">
+        <div className="relative w-full max-w-[900px] h-[600px] bg-slate-900 rounded-[60px] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-800 flex">
           
           {/* 1. GİRİŞ FORMU (SOLDA) */}
           <div className={`w-1/2 h-full flex flex-col items-center justify-center p-14 transition-all duration-700 ease-in-out z-10 ${!isLoginActive ? 'translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'}`}>
             <h2 className="text-4xl font-black text-rose-500 mb-10 uppercase tracking-tighter">Giriş Yap</h2>
             <div className="w-full space-y-5">
-              <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-rose-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-rose-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-rose-500 transition-all placeholder:text-slate-500" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-rose-500 transition-all placeholder:text-slate-500" value={password} onChange={(e) => setPassword(e.target.value)} />
               <button onClick={() => { if(email && password) { setUserName(email.split('@')[0]); setIsJoined(true); }}} className="w-full bg-rose-600 text-white p-5 rounded-2xl font-black text-lg hover:bg-rose-700 shadow-xl active:scale-95 transition-all">BAĞLAN</button>
-              <button onClick={() => setIsLoginActive(false)} className="w-full text-center text-slate-400 text-sm mt-4 hover:text-rose-500 font-bold transition-colors">Hesabın yok mu? <span className="underline">Kayıt Ol</span></button>
             </div>
           </div>
 
@@ -259,11 +249,10 @@ export default function Home() {
           <div className={`w-1/2 h-full flex flex-col items-center justify-center p-14 transition-all duration-700 ease-in-out z-10 ${isLoginActive ? '-translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'}`}>
             <h2 className="text-4xl font-black text-sky-500 mb-10 uppercase tracking-tighter">Kayıt Ol</h2>
             <div className="w-full space-y-5">
-              <input type="text" placeholder="Takma Ad" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all" value={userName} onChange={(e) => setUserName(e.target.value)} />
-              <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input type="text" placeholder="Takma Ad" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all placeholder:text-slate-500" value={userName} onChange={(e) => setUserName(e.target.value)} />
+              <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all placeholder:text-slate-500" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all placeholder:text-slate-500" value={password} onChange={(e) => setPassword(e.target.value)} />
               <button onClick={() => { if(userName && email && password) setIsLoginActive(true); }} className="w-full bg-sky-600 text-white p-5 rounded-2xl font-black text-lg hover:bg-sky-700 shadow-xl active:scale-95 transition-all">HESAP OLUŞTUR</button>
-              <button onClick={() => setIsLoginActive(true)} className="w-full text-center text-slate-400 text-sm mt-4 hover:text-sky-500 font-bold transition-colors">Zaten üye misin? <span className="underline">Giriş Yap</span></button>
             </div>
           </div>
 
@@ -272,15 +261,12 @@ export default function Home() {
             className={`absolute top-0 w-1/2 h-full bg-gradient-to-br from-rose-600 to-rose-900 z-20 transition-all duration-700 ease-in-out flex flex-col items-center justify-center text-white px-14 text-center
             ${isLoginActive ? 'left-1/2 rounded-l-[120px]' : 'left-0 rounded-r-[120px]'}`}
           >
-            <h1 className="text-5xl font-black tracking-tighter mb-6 leading-none">
+            <h1 className="text-5xl font-black tracking-tighter mb-10 leading-none">
               {isLoginActive ? "MERHABA,\nDUMBASS!" : "TEKRAR\nSELAM!"}
             </h1>
-            <p className="text-rose-100 text-base mb-10 font-medium leading-relaxed">
-              {isLoginActive ? "Henüz bir hesabın yoksa, hemen kayıt ol ve aramıza katıl!" : "Zaten bu çılgın topluluğun bir parçasıysan, hemen giriş yap."}
-            </p>
             <button 
               onClick={() => setIsLoginActive(!isLoginActive)}
-              className="border-[3px] border-white px-12 py-4 rounded-full font-black uppercase text-sm hover:bg-white hover:text-rose-700 transition-all active:scale-90"
+              className="border-[3px] border-white px-12 py-4 rounded-full font-black uppercase text-sm hover:bg-white hover:text-rose-700 transition-all active:scale-90 shadow-2xl"
             >
               {isLoginActive ? "Kayıt Olmaya Git" : "Giriş Yapmaya Git"}
             </button>
