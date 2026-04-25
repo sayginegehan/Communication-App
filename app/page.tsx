@@ -224,12 +224,20 @@ export default function Home() {
   };
 
   const toggleDeafen = () => {
-    const newDeafenStatus = !isDeafened;
-    setIsDeafened(newDeafenStatus);
-    socket.emit("deafen-status", newDeafenStatus); // Backend'e bildir
+    const newStatus = !isDeafened;
+    setIsDeafened(newStatus);
+    socket.emit("deafen-status", newStatus);
     Object.values(remoteAudios.current).forEach(audio => {
-        audio.muted = newDeafenStatus;
+        audio.muted = newStatus;
     });
+  };
+
+  const toggleMute = () => {
+    const newStatus = !isMuted;
+    setIsMuted(newStatus);
+    const track = localStream.current?.getAudioTracks()[0];
+    if (track) track.enabled = !newStatus;
+    socket.emit("mute-status", newStatus);
   };
 
   const myRole = users.find((u) => u.id === socket.id)?.role || users.find((u) => u.name === userName)?.role || "member";
@@ -324,7 +332,7 @@ export default function Home() {
           <button onClick={toggleDeafen} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isDeafened ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-white'}`}>
             {isDeafened ? "Kulaklığı Aç" : "Kulaklığı Sustur"}
           </button>
-          <button onClick={() => { const t = localStream.current?.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; socket.emit("mute-status", !t.enabled); } setIsMuted(!isMuted); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>
+          <button onClick={toggleMute} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>
             {isMuted ? "Mikrofonu Aç" : "Mikrofonu Kapat"}
           </button>
         </div>
@@ -354,10 +362,10 @@ export default function Home() {
                   {users.map((u) => (
                     <div key={u.id} onContextMenu={(e) => handleContextMenu(e, u.id)} className={`p-4 rounded-3xl border-4 flex items-center gap-5 transition-all duration-300 relative cursor-context-menu w-80 ${u.isSpeaking ? 'border-sky-500 bg-sky-950/20' : 'border-slate-800 bg-slate-900'} shadow-lg`}>
                       
-                      {/* DURUM SİMGELERİ (ÜST SAĞ) */}
-                      <div className="absolute top-3 right-4 flex gap-2 z-20">
+                      {/* DURUM SİMGELERİ (SAĞ ÜST - SIRALI) */}
+                      <div className="absolute top-3 right-4 flex flex-row-reverse gap-1.5 z-20">
                           {u.isDeafened && (
-                            <div className="bg-amber-500/20 p-1.5 rounded-full border border-amber-500/40 shadow-inner">
+                            <div className="bg-amber-500/20 p-1.5 rounded-full border border-amber-500/40 shadow-inner flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm13 0h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-5Z" />
                                   <path d="M21 11V7a9 9 0 0 0-18 0v4" />
@@ -366,11 +374,12 @@ export default function Home() {
                             </div>
                           )}
                           {u.isMuted && (
-                            <div className="bg-rose-600/20 p-1.5 rounded-full border border-rose-500/40 shadow-inner">
+                            <div className="bg-rose-600/20 p-1.5 rounded-full border border-rose-500/40 shadow-inner flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                                  <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
-                                  <line x1="12" y1="19" x2="12" y2="22" />
+                                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                                  <line x1="12" y1="19" x2="12" y2="23"/>
+                                  <line x1="8" y1="23" x2="16" y2="23"/>
                                   <line x1="2" y1="2" x2="22" y2="22" />
                                 </svg>
                             </div>
@@ -388,6 +397,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
+            {/* CHAT PANELİ */}
             <div className="w-80 flex flex-col bg-slate-900/50 backdrop-blur-md shrink-0">
               <div className="p-4 border-b border-slate-800 font-black text-[10px] uppercase text-slate-500 bg-slate-900/20 tracking-widest">Sohbet</div>
               <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
@@ -410,7 +420,6 @@ export default function Home() {
 
       {contextMenu && (
         <div className="fixed z-50 bg-slate-900 border border-slate-700 shadow-2xl rounded-2xl p-2 w-48 font-sans" style={{ top: contextMenu.y, left: contextMenu.x }}>
-          <button onClick={() => { socket.emit("send-nudge", contextMenu.userId); setContextMenu(null); }} className="w-full text-left p-3 hover:bg-amber-500 hover:text-slate-900 rounded-xl text-xs font-black transition-all mb-1">👉 DÜRT!</button>
           {myRole === "owner" && (
             <>
               <button onClick={() => {
