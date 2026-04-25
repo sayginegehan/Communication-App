@@ -32,6 +32,7 @@ export default function Home() {
   const [activeRooms, setActiveRooms] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false); // Kulaklık durumu
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -104,6 +105,7 @@ export default function Home() {
   const createPeer = (targetId: string, isInitiator: boolean) => {
     if (peerConnections.current[targetId]) return peerConnections.current[targetId];
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    
     pc.onicecandidate = (e) => e.candidate && socket.emit("ice-candidate", { candidate: e.candidate, to: targetId });
     pc.ontrack = (e) => {
       if (e.track.kind === "video") {
@@ -114,9 +116,12 @@ export default function Home() {
         audio.autoplay = true;
         audio.volume = userVolumes[targetId] ?? 1.0;
         remoteAudios.current[targetId] = audio;
+        // Kulaklık kapalıysa sesi kıs
+        if (isDeafened) audio.muted = true;
         document.body.appendChild(audio);
       }
     };
+
     pc.onnegotiationneeded = async () => {
         try {
             if (isInitiator) {
@@ -126,8 +131,10 @@ export default function Home() {
             }
         } catch (err) {}
     };
+
     localStream.current?.getTracks().forEach(t => pc.addTrack(t, localStream.current!));
     if (screenStream.current) screenStream.current.getTracks().forEach(t => pc.addTrack(t, screenStream.current!));
+    
     peerConnections.current[targetId] = pc;
     return pc;
   };
@@ -221,6 +228,16 @@ export default function Home() {
     }
   };
 
+  // KULAKLIK KAPATMA FONKSİYONU
+  const toggleDeafen = () => {
+    const newDeafenStatus = !isDeafened;
+    setIsDeafened(newDeafenStatus);
+    // Gelen seslerin tamamını sustur
+    Object.values(remoteAudios.current).forEach(audio => {
+        audio.muted = newDeafenStatus;
+    });
+  };
+
   const myRole = users.find((u) => u.id === socket.id)?.role || users.find((u) => u.name === userName)?.role || "member";
   const filteredRooms = activeRooms.filter((room) => (room.serverId || "default") === currentServer);
   const roomsToRender = filteredRooms.length > 0 ? filteredRooms : activeRooms;
@@ -231,7 +248,6 @@ export default function Home() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 font-sans overflow-hidden">
         <div className="relative w-full max-w-[900px] h-[600px] bg-slate-900 rounded-[60px] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-800 flex">
           
-          {/* 1. GİRİŞ FORMU (SOLDA) */}
           <div className={`w-1/2 h-full flex flex-col items-center justify-center p-14 transition-all duration-700 ease-in-out z-10 ${!isLoginActive ? 'translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'}`}>
             <h2 className="text-4xl font-black text-rose-500 mb-10 uppercase tracking-tighter">Giriş Yap</h2>
             <div className="w-full space-y-5">
@@ -241,7 +257,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 2. KAYIT FORMU (SAĞDA) */}
           <div className={`w-1/2 h-full flex flex-col items-center justify-center p-14 transition-all duration-700 ease-in-out z-10 ${isLoginActive ? '-translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'}`}>
             <h2 className="text-4xl font-black text-sky-500 mb-10 uppercase tracking-tighter">Kayıt Ol</h2>
             <div className="w-full space-y-5">
@@ -252,12 +267,11 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 3. KAYAN OVERLAY (KIRMIZI PANEL) */}
           <div 
             className={`absolute top-0 w-1/2 h-full bg-gradient-to-br from-rose-600 to-rose-900 z-20 transition-all duration-700 ease-in-out flex flex-col items-center justify-center text-white px-14 text-center
             ${isLoginActive ? 'left-1/2 rounded-l-[120px]' : 'left-0 rounded-r-[120px]'}`}
           >
-            <h1 className="text-5xl font-black tracking-tighter mb-6 leading-none uppercase">
+            <h1 className="text-5xl font-black tracking-tighter mb-10 leading-none uppercase">
               {isLoginActive ? "TEKRAR\nSELAM!" : "MERHABA,\nDUMBASS!"}
             </h1>
             <p className="text-rose-100 text-base mb-10 font-medium leading-relaxed">
@@ -278,7 +292,7 @@ export default function Home() {
     );
   }
 
-  // --- CHAT EKRANI (ORİJİNAL TASARIM) ---
+  // --- CHAT EKRANI ---
   return (
     <div className={`flex h-screen bg-slate-950 text-white font-sans overflow-hidden transition-all duration-100 ${isNudged ? 'translate-x-2 translate-y-2 scale-[1.01]' : ''}`}>
       <div className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
@@ -329,9 +343,15 @@ export default function Home() {
             </div>
           </div>
         </div>
+        
+        {/* YENİLENEN ALT PANEL */}
         <div className="p-4 bg-slate-800/50 border-t border-slate-800 space-y-3">
-          <button onClick={() => { const t = localStream.current?.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; socket.emit("mute-status", !t.enabled); } setIsMuted(!isMuted); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>{isMuted ? "Mikrofonu Aç" : "Mikrofonu Kapat"}</button>
-          <button onClick={() => socket.emit("send-nudge")} className="w-full p-4 bg-amber-500 rounded-2xl font-black text-[10px] uppercase hover:bg-amber-600 transition-all text-slate-900 shadow-lg">Dürt! (Herkesi)</button>
+          <button onClick={toggleDeafen} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isDeafened ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-white'}`}>
+            {isDeafened ? "Kulaklığı Aç" : "Kulaklığı Sustur"}
+          </button>
+          <button onClick={() => { const t = localStream.current?.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; socket.emit("mute-status", !t.enabled); } setIsMuted(!isMuted); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>
+            {isMuted ? "Mikrofonu Aç" : "Mikrofonu Kapat"}
+          </button>
         </div>
       </div>
 
@@ -374,7 +394,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            {/* CHAT PANELİ */}
             <div className="w-80 flex flex-col bg-slate-900/50 backdrop-blur-md shrink-0">
               <div className="p-4 border-b border-slate-800 font-black text-[10px] uppercase text-slate-500 bg-slate-900/20 tracking-widest">Sohbet</div>
               <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
