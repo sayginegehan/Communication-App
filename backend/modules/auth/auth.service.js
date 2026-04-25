@@ -1,9 +1,31 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const { getPrismaClient } = require("../../lib/prisma");
+
+const LEGACY_HASH_ALGORITHM = "sha512";
+const LEGACY_HASH_ITERATIONS = 210000;
+const LEGACY_HASH_KEY_LENGTH = 64;
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function verifyLegacyPassword(password, storedHash) {
+  const [salt, storedKey] = String(storedHash || "").split(".");
+  if (!salt || !storedKey) {
+    return false;
+  }
+  const derivedKey = crypto
+    .pbkdf2Sync(
+      password,
+      salt,
+      LEGACY_HASH_ITERATIONS,
+      LEGACY_HASH_KEY_LENGTH,
+      LEGACY_HASH_ALGORITHM
+    )
+    .toString("hex");
+  return crypto.timingSafeEqual(Buffer.from(derivedKey), Buffer.from(storedKey));
 }
 
 async function register({ email, userName, password }) {
@@ -35,7 +57,20 @@ async function login({ email, password }) {
     where: { email: normalizeEmail(email) },
   });
   if (!user) return null;
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  let valid = false;
+  if (String(user.passwordHash || "").startsWith("$2")) {
+    valid = await bcrypt.compare(password, user.passwordHash);
+  } else {
+    valid = verifyLegacyPassword(password, user.passwordHash);
+    if (valid) {
+      // One-time migration: upgrade legacy hash format on successful login.
+      const newHash = await bcrypt.hash(password, 10);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: newHash },
+      });
+    }
+  }
   if (!valid) return null;
   return { id: user.id, email: user.email, userName: user.userName };
 }
