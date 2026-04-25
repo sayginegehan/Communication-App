@@ -37,6 +37,9 @@ async function start() {
       console.log(`   - GET /__backend-signature`);
       console.log(`   - POST /auth/register`);
       console.log(`   - POST /auth/login`);
+      console.log(`   - GET /auth/me`);
+      console.log(`   - POST /auth/refresh`);
+      console.log(`   - POST /api/auth/register`);
       console.log(`-----------------------------------------`);
     });
 

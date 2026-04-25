@@ -3,7 +3,10 @@ const { JWT_COOKIE_NAME, verifyAuthToken } = require("../lib/jwt");
 
 function requireAuth(req, res, next) {
   try {
-    const headerToken = req.headers.authorization?.replace("Bearer ", "");
+    const authHeader = req.headers.authorization || "";
+    const headerToken = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7).trim()
+      : "";
     const cookieToken = req.cookies?.[JWT_COOKIE_NAME];
     const token = headerToken || cookieToken;
     if (!token) {
@@ -12,7 +15,7 @@ function requireAuth(req, res, next) {
     }
     req.auth = verifyAuthToken(token);
     next();
-  } catch (_error) {
+  } catch {
     res.status(401).json({ error: "Unauthorized" });
   }
 }

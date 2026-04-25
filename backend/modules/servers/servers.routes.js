@@ -7,5 +7,6 @@ const router = express.Router();
 
 router.get("/", requireAuth, controller.list);
 router.post("/", requireAuth, controller.create);
+router.delete("/:serverId", requireAuth, controller.remove);
 
 module.exports = router;

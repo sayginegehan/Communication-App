@@ -52,15 +52,13 @@ function originAllowedByList(origin, allowedOrigins) {
 }
 
 function buildCorsOriginValidator(allowedOrigins) {
-  const normalizedAllowedOrigins = allowedOrigins.map((origin) =>
-    normalizeOrigin(origin)
-  );
   return (origin, callback) => {
     const normalizedOrigin = normalizeOrigin(origin);
-    if (!normalizedOrigin || normalizedAllowedOrigins.includes(normalizedOrigin)) {
+    if (originAllowedByList(normalizedOrigin, allowedOrigins)) {
       callback(null, true);
       return;
     }
+    callback(new Error("Origin not allowed by CORS"));
   };
 }
 

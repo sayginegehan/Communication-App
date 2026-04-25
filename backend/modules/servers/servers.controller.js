@@ -6,6 +6,14 @@ const createSchema = z.object({
   name: z.string().min(1).max(80),
 });
 
+const deleteSchema = z.object({
+  serverId: z.string().min(1),
+});
+
+function statusFromError(error) {
+  return typeof error?.statusCode === "number" ? error.statusCode : 400;
+}
+
 async function create(req, res) {
   try {
     const payload = createSchema.parse(req.body);
@@ -21,7 +29,18 @@ async function list(req, res) {
   res.json({ servers });
 }
 
+async function remove(req, res) {
+  try {
+    const payload = deleteSchema.parse(req.params);
+    await service.deleteServer({ serverId: payload.serverId, userId: req.auth.sub });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(statusFromError(error)).json({ error: error.message });
+  }
+}
+
 module.exports = {
   create,
   list,
+  remove,
 };
