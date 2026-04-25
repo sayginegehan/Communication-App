@@ -1,11 +1,20 @@
 "use client";
-export default function UserList({ users, handleContextMenu, socket }: any) {
+import type React from "react";
+
+type UserItem = { id: string; name: string };
+
+interface UserListProps {
+  users: UserItem[];
+  handleContextMenu: (e: React.MouseEvent, userId: string) => void;
+}
+
+export default function UserList({ users, handleContextMenu }: UserListProps) {
   return (
     <div className="w-64 bg-slate-950 border-l border-slate-900 p-4 space-y-6 shrink-0">
       <h3 className="text-[10px] font-black text-slate-600 uppercase tracking-widest px-2">Çevrimiçi — {users.length}</h3>
       
       <div className="space-y-3">
-        {users.map((u: any) => (
+        {users.map((u) => (
           <div 
             key={u.id} 
             onContextMenu={(e) => handleContextMenu(e, u.id)}
@@ -23,7 +32,7 @@ export default function UserList({ users, handleContextMenu, socket }: any) {
               <div className="flex items-center gap-1">
                 <span className="text-xs font-black text-slate-300 truncate group-hover:text-white uppercase">{u.name}</span>
               </div>
-              <span className="text-[8px] text-slate-600 font-bold uppercase truncate italic">"Playing Cyberpunk 2077"</span>
+              <span className="text-[8px] text-slate-600 font-bold uppercase truncate italic">&quot;Playing Cyberpunk 2077&quot;</span>
             </div>
           </div>
         ))}

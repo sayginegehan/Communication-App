@@ -7,6 +7,8 @@ const {
   signalSchema,
   createServerSchema,
   createRoomSchema,
+  deleteRoomSchema,
+  typingSchema,
   roleChangeSchema,
   parseOrThrow,
 } = require("../validation/schemas");
@@ -230,6 +232,52 @@ function registerSocketHandlers(io, { state, store, env }) {
         await store.touchRoom(buildServerMarker(normalizedServerId));
         await store.touchRoom(buildPersistedRoomId(normalizedServerId, roomName));
         await emitRoomList(io, state, store);
+        if (typeof ack === "function") {
+          ack({ ok: true });
+        }
+      } catch (error) {
+        if (typeof ack === "function") {
+          ack({ ok: false, error: error.message });
+        }
+      }
+    });
+
+    socket.on("delete-room", async (payload, ack) => {
+      try {
+        const { serverId, roomName, userName } = parseOrThrow(
+          deleteRoomSchema,
+          payload,
+          "delete-room"
+        );
+        const normalizedServerId = normalizeServerId(serverId);
+        const role = await getUserRoleInServer(store, normalizedServerId, userName);
+        if (normalizedServerId !== "default" && !["owner", "admin"].includes(role || "")) {
+          throw new Error("Insufficient permission: only owner/admin can delete rooms");
+        }
+        const persistedRoomId = buildPersistedRoomId(normalizedServerId, roomName);
+        await store.deleteRoom(persistedRoomId);
+
+        // Kapatilan odadaki kullanicilari cikar ve fallback olarak sunucu odasina tasi.
+        const fallbackRoomId = buildPersistedRoomId(normalizedServerId, "genel");
+        await store.touchRoom(fallbackRoomId);
+        const roomUsers = state.getRoomUsers(persistedRoomId);
+        for (const u of roomUsers) {
+          const targetSocket = io.sockets.sockets.get(u.id);
+          if (!targetSocket) {
+            continue;
+          }
+          targetSocket.leave(persistedRoomId);
+          targetSocket.join(fallbackRoomId);
+          state.upsertUser(u.id, {
+            ...u,
+            room: fallbackRoomId,
+            roomName: "genel",
+          });
+          targetSocket.emit("room-deleted", { roomName, fallbackRoomName: "genel" });
+        }
+
+        await emitRoomList(io, state, store);
+        emitUserList(io, state, fallbackRoomId);
         if (typeof ack === "function") {
           ack({ ok: true });
         }
@@ -486,6 +534,22 @@ function registerSocketHandlers(io, { state, store, env }) {
           ack({ ok: false, error: error.message });
         }
       }
+    });
+
+    socket.on("typing-status", (payload) => {
+      try {
+        const parsed = parseOrThrow(typingSchema, payload, "typing-status");
+        const normalizedServerId = normalizeServerId(parsed.serverId || "default");
+        const persistedRoomId = buildPersistedRoomId(normalizedServerId, parsed.roomId);
+        const user = state.getUser(socket.id);
+        if (!user?.room || user.room !== persistedRoomId) {
+          return;
+        }
+        socket.to(user.room).emit("typing-status", {
+          userName: parsed.userName,
+          isTyping: parsed.isTyping,
+        });
+      } catch {}
     });
 
     socket.on("send-nudge", (targetId, ack) => {

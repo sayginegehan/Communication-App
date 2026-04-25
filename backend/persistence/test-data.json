@@ -18,6 +18,12 @@
           "sender": "ege",
           "text": "selam",
           "time": "21:04"
+        },
+        {
+          "id": 1777141102467,
+          "sender": "ege",
+          "text": "selam",
+          "time": "21:18"
         }
       ],
       "events": [
@@ -44,6 +50,30 @@
           "socketId": "lIkGh91fpSuvMnLKAAAD",
           "userName": "alice",
           "at": 1777140276744
+        },
+        {
+          "type": "join",
+          "socketId": "ZQd8_fS1Wv0goHYjAAAB",
+          "userName": "ege",
+          "at": 1777141102464
+        },
+        {
+          "type": "disconnect",
+          "socketId": "ZQd8_fS1Wv0goHYjAAAB",
+          "userName": "ege",
+          "at": 1777141102638
+        },
+        {
+          "type": "join",
+          "socketId": "KuUSxbT-PuFxYhekAAAD",
+          "userName": "alice",
+          "at": 1777141102644
+        },
+        {
+          "type": "disconnect",
+          "socketId": "KuUSxbT-PuFxYhekAAAD",
+          "userName": "alice",
+          "at": 1777141102647
         }
       ]
     },
@@ -79,6 +109,30 @@
           "socketId": "dbMe8v8ywDBfbdj8AAAH",
           "userName": "ali",
           "at": 1777140276776
+        },
+        {
+          "type": "join",
+          "socketId": "mh5cmaXiaSQtUj1rAAAF",
+          "userName": "ege",
+          "at": 1777141102655
+        },
+        {
+          "type": "join",
+          "socketId": "zB5emhGItA3ZPZPYAAAH",
+          "userName": "ali",
+          "at": 1777141102658
+        },
+        {
+          "type": "disconnect",
+          "socketId": "mh5cmaXiaSQtUj1rAAAF",
+          "userName": "ege",
+          "at": 1777141102661
+        },
+        {
+          "type": "disconnect",
+          "socketId": "zB5emhGItA3ZPZPYAAAH",
+          "userName": "ali",
+          "at": 1777141102661
         }
       ]
     },
@@ -102,6 +156,18 @@
           "socketId": "JH2ISZ-hWFgSJzRFAAAJ",
           "userName": "ege",
           "at": 1777140276792
+        },
+        {
+          "type": "join",
+          "socketId": "ZwlZaTZFOO01B7wmAAAJ",
+          "userName": "ege",
+          "at": 1777141102668
+        },
+        {
+          "type": "disconnect",
+          "socketId": "ZwlZaTZFOO01B7wmAAAJ",
+          "userName": "ege",
+          "at": 1777141102670
         }
       ]
     },
@@ -125,6 +191,18 @@
           "socketId": "mjpNaojA-8skKgzyAAAL",
           "userName": "qa",
           "at": 1777140276808
+        },
+        {
+          "type": "join",
+          "socketId": "FOuMIVwUv70LO22oAAAL",
+          "userName": "qa",
+          "at": 1777141102674
+        },
+        {
+          "type": "disconnect",
+          "socketId": "FOuMIVwUv70LO22oAAAL",
+          "userName": "qa",
+          "at": 1777141102676
         }
       ]
     },
@@ -158,6 +236,18 @@
           "socketId": "ApCjDPkpPP9VFhjIAAAN",
           "userName": "ege",
           "at": 1777140276829
+        },
+        {
+          "type": "join",
+          "socketId": "CKhXO3dzucMsZFzTAAAN",
+          "userName": "ege",
+          "at": 1777141102684
+        },
+        {
+          "type": "disconnect",
+          "socketId": "CKhXO3dzucMsZFzTAAAN",
+          "userName": "ege",
+          "at": 1777141102686
         }
       ]
     },
@@ -196,6 +286,18 @@
           "socketId": "JweBxZnrDyIASqQeAAAR",
           "userName": "member",
           "at": 1777140276848
+        },
+        {
+          "type": "join",
+          "socketId": "wMei5S9MuLbrZ9r1AAAR",
+          "userName": "member",
+          "at": 1777141102695
+        },
+        {
+          "type": "disconnect",
+          "socketId": "wMei5S9MuLbrZ9r1AAAR",
+          "userName": "member",
+          "at": 1777141102698
         }
       ]
     },
@@ -234,6 +336,18 @@
           "socketId": "zK1Qum8yrjkgmUjFAAAV",
           "userName": "memberx",
           "at": 1777140276872
+        },
+        {
+          "type": "join",
+          "socketId": "va06_6fHoQ138T65AAAV",
+          "userName": "memberx",
+          "at": 1777141102709
+        },
+        {
+          "type": "disconnect",
+          "socketId": "va06_6fHoQ138T65AAAV",
+          "userName": "memberx",
+          "at": 1777141102717
         }
       ]
     },
@@ -272,16 +386,28 @@
           "socketId": "FXPXMIMqLQKHSz1LAAAZ",
           "userName": "memberd",
           "at": 1777140276894
+        },
+        {
+          "type": "join",
+          "socketId": "H9kQvxOtp-f2kfmjAAAZ",
+          "userName": "memberd",
+          "at": 1777141102723
+        },
+        {
+          "type": "disconnect",
+          "socketId": "H9kQvxOtp-f2kfmjAAAZ",
+          "userName": "memberd",
+          "at": 1777141102731
         }
       ]
     },
-    "__role__:takimd::owner::memberd": {
-      "roomId": "__role__:takimd::owner::memberd",
+    "takimd::admin-oda": {
+      "roomId": "takimd::admin-oda",
       "messages": [],
       "events": []
     },
-    "takimd::admin-oda": {
-      "roomId": "takimd::admin-oda",
+    "__role__:takimd::owner::memberd": {
+      "roomId": "__role__:takimd::owner::memberd",
       "messages": [],
       "events": []
     }

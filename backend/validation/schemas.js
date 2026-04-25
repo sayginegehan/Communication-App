@@ -30,6 +30,19 @@ const createRoomSchema = z.object({
   userName: z.string().trim().min(1).max(32),
 });
 
+const deleteRoomSchema = z.object({
+  serverId: z.string().trim().min(1).max(64),
+  roomName: z.string().trim().min(1).max(64),
+  userName: z.string().trim().min(1).max(32),
+});
+
+const typingSchema = z.object({
+  roomId: z.string().trim().min(1).max(64),
+  serverId: z.string().trim().min(1).max(64).optional(),
+  userName: z.string().trim().min(1).max(32),
+  isTyping: z.boolean(),
+});
+
 const roleChangeSchema = z.object({
   serverId: z.string().trim().min(1).max(64),
   actorUserName: z.string().trim().min(1).max(32),
@@ -56,6 +69,8 @@ module.exports = {
   signalSchema,
   createServerSchema,
   createRoomSchema,
+  deleteRoomSchema,
+  typingSchema,
   roleChangeSchema,
   parseOrThrow,
 };

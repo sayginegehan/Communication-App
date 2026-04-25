@@ -6,7 +6,7 @@ import AuthContainer from "../components/auth/authContainer";
 import ServerList from "../components/Sidebar/ServerList";
 import ChannelList from "../components/Sidebar/ChannelList";
 import ControlBar from "../components/Voice/ControlBar";
-import UserList from "../components/Chat/UserList";
+import ChatArea from "../components/Chat/ChatArea";
 import ProfileModal from "../components/Profile/ProfileModal";
 
 const socketServerUrl = "https://communication-app-production.up.railway.app";
@@ -15,7 +15,14 @@ const socket = io(socketServerUrl, { path: socketPath, transports: ["websocket",
 
 type ServerItem = { id: string; name: string };
 type RoomItem = { name: string; serverId?: string; count?: number };
-type UserItem = { id: string; name: string };
+type UserItem = {
+  id: string;
+  name: string;
+  roomName?: string;
+  isMuted?: boolean;
+  isSpeaking?: boolean;
+};
+type ChatMessage = { id: number | string; sender: string; text: string; time?: string };
 type SignalPayload = {
   from: string;
   offer?: RTCSessionDescriptionInit;
@@ -32,13 +39,17 @@ export default function Home() {
   const [currentRoom, setCurrentRoom] = useState("");
   const [activeRooms, setActiveRooms] = useState<RoomItem[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isDeafened, setIsDeafened] = useState(false);
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string } | null>(null);
 
   const localStream = useRef<MediaStream | null>(null);
   const peerConnections = useRef<{ [key: string]: RTCPeerConnection }>({});
   const remoteAudios = useRef<{ [key: string]: HTMLAudioElement }>({});
+  const speakingIntervalRef = useRef<number | null>(null);
+  const isSpeakingRef = useRef(false);
 
   const closePeerConnection = (peerId: string) => {
     if (remoteAudios.current[peerId]) {
@@ -54,6 +65,39 @@ export default function Home() {
 
   const resetVoiceConnections = () => {
     Object.keys(peerConnections.current).forEach((peerId) => closePeerConnection(peerId));
+  };
+
+  const stopSpeakingDetection = () => {
+    if (speakingIntervalRef.current) {
+      window.clearInterval(speakingIntervalRef.current);
+      speakingIntervalRef.current = null;
+    }
+    if (isSpeakingRef.current) {
+      isSpeakingRef.current = false;
+      socket.emit("speaking-status", false);
+    }
+  };
+
+  const startSpeakingDetection = () => {
+    if (!localStream.current || speakingIntervalRef.current) {
+      return;
+    }
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(localStream.current);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const buffer = new Uint8Array(analyser.frequencyBinCount);
+
+    speakingIntervalRef.current = window.setInterval(() => {
+      analyser.getByteFrequencyData(buffer);
+      const avg = buffer.reduce((sum, value) => sum + value, 0) / buffer.length;
+      const speakingNow = avg > 18 && !isMuted && !isDeafened;
+      if (speakingNow !== isSpeakingRef.current) {
+        isSpeakingRef.current = speakingNow;
+        socket.emit("speaking-status", speakingNow);
+      }
+    }, 250);
   };
 
   const createPeerConnection = (peerId: string) => {
@@ -100,6 +144,10 @@ export default function Home() {
     const handleServerList = (list: ServerItem[]) => setServers(list);
     const handleRoomList = (rooms: RoomItem[]) => setActiveRooms(rooms);
     const handleUserList = (list: UserItem[]) => setUsers(list);
+    const handleMessageHistory = (list: ChatMessage[]) => setMessages(list);
+    const handleReceiveMessage = (message: ChatMessage) => {
+      setMessages((prev) => [...prev, message]);
+    };
     const handleConnect = () => socket.emit("request-state");
     const handleUserJoined = async (peerId: string) => {
       if (!localStream.current || peerId === socket.id) {
@@ -132,10 +180,26 @@ export default function Home() {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     };
     const handleUserLeft = (peerId: string) => closePeerConnection(peerId);
+    const handleTypingStatus = ({ userName: typingUser, isTyping }: { userName: string; isTyping: boolean }) => {
+      setTypingUsers((prev) => {
+        if (isTyping) {
+          if (prev.includes(typingUser)) return prev;
+          return [...prev, typingUser];
+        }
+        return prev.filter((name) => name !== typingUser);
+      });
+    };
+    const handleRoomDeleted = ({ fallbackRoomName }: { fallbackRoomName: string }) => {
+      setCurrentRoom(fallbackRoomName);
+    };
 
     socket.on("server-list", handleServerList);
     socket.on("room-list", handleRoomList);
     socket.on("user-list", handleUserList);
+    socket.on("message-history", handleMessageHistory);
+    socket.on("receive-message", handleReceiveMessage);
+    socket.on("typing-status", handleTypingStatus);
+    socket.on("room-deleted", handleRoomDeleted);
     socket.on("connect", handleConnect);
     socket.on("user-joined", handleUserJoined);
     socket.on("offer", handleOffer);
@@ -143,21 +207,22 @@ export default function Home() {
     socket.on("ice-candidate", handleIceCandidate);
     socket.on("user-left", handleUserLeft);
 
-    const closeMenu = () => setContextMenu(null);
-    window.addEventListener("click", closeMenu);
-
     return () => {
       socket.off("server-list", handleServerList);
       socket.off("room-list", handleRoomList);
       socket.off("user-list", handleUserList);
+      socket.off("message-history", handleMessageHistory);
+      socket.off("receive-message", handleReceiveMessage);
+      socket.off("typing-status", handleTypingStatus);
+      socket.off("room-deleted", handleRoomDeleted);
       socket.off("connect", handleConnect);
       socket.off("user-joined", handleUserJoined);
       socket.off("offer", handleOffer);
       socket.off("answer", handleAnswer);
       socket.off("ice-candidate", handleIceCandidate);
       socket.off("user-left", handleUserLeft);
-      window.removeEventListener("click", closeMenu);
       resetVoiceConnections();
+      stopSpeakingDetection();
     };
     // refs keep helper functions stable for this subscription lifecycle.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,6 +241,7 @@ export default function Home() {
       localStream.current.getAudioTracks().forEach((track) => {
         track.enabled = !isMuted;
       });
+      startSpeakingDetection();
     }
 
     resetVoiceConnections();
@@ -183,6 +249,27 @@ export default function Home() {
     socket.emit("join-room", { roomId: roomName, userName, serverId: currentServer }, (res: { ok?: boolean }) => {
       if (res?.ok) {
         setCurrentRoom(roomName);
+        setTypingUsers([]);
+      }
+    });
+  };
+
+  const handleCreateRoom = () => {
+    const roomName = prompt("Yeni kanal adı:");
+    if (!roomName?.trim()) return;
+    socket.emit("create-room", { serverId: currentServer, roomName: roomName.trim(), userName }, (res: { ok?: boolean; error?: string }) => {
+      if (!res?.ok) {
+        alert(res?.error || "Kanal oluşturulamadı.");
+      }
+    });
+  };
+
+  const handleDeleteRoom = (roomName: string) => {
+    const ok = confirm(`#${roomName} kanalını silmek istediğine emin misin?`);
+    if (!ok) return;
+    socket.emit("delete-room", { serverId: currentServer, roomName, userName }, (res: { ok?: boolean; error?: string }) => {
+      if (!res?.ok) {
+        alert(res?.error || "Kanal silinemedi.");
       }
     });
   };
@@ -198,6 +285,7 @@ export default function Home() {
         });
       }
       socket.emit("mute-status", true);
+      socket.emit("speaking-status", false);
     }
     Object.values(remoteAudios.current).forEach((audio) => {
       audio.muted = status;
@@ -214,19 +302,40 @@ export default function Home() {
       });
     }
     socket.emit("mute-status", status);
+    if (status) {
+      socket.emit("speaking-status", false);
+    }
   };
 
-  const handleContextMenu = (e: React.MouseEvent, userId: string) => {
+  const sendMessage = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (userId !== socket.id) setContextMenu({ x: e.pageX, y: e.pageY, userId });
+    if (!currentRoom || !newMessage.trim()) return;
+    socket.emit("send-message", { text: newMessage.trim() }, (res: { ok?: boolean }) => {
+      if (res?.ok) {
+        setNewMessage("");
+        socket.emit("typing-status", { roomId: currentRoom, serverId: currentServer, userName, isTyping: false });
+      }
+    });
+  };
+
+  const handleMessageInput = (value: string) => {
+    setNewMessage(value);
+    if (!currentRoom) return;
+    socket.emit("typing-status", { roomId: currentRoom, serverId: currentServer, userName, isTyping: value.trim().length > 0 });
   };
 
   const handleServerChange = (nextServerId: string) => {
     setCurrentServer(nextServerId);
     setCurrentRoom("");
     setUsers([]);
+    setMessages([]);
+    setTypingUsers([]);
     resetVoiceConnections();
   };
+
+  const typingLabel = typingUsers.length
+    ? `${typingUsers.slice(0, 2).join(", ")} yazıyor${typingUsers.length > 2 ? "..." : ""}`
+    : "";
 
   if (!isJoined) return <AuthContainer onJoin={(_email: string, n: string) => { setUserName(n); setIsJoined(true); }} />;
 
@@ -249,6 +358,10 @@ export default function Home() {
           rooms={activeRooms.filter((r) => (r.serverId || "default") === currentServer)}
           currentRoom={currentRoom}
           handleJoinRoom={handleJoinRoom}
+          handleCreateRoom={handleCreateRoom}
+          handleDeleteRoom={handleDeleteRoom}
+          currentUserId={socket.id || ""}
+          users={users}
           userName={userName}
           setIsJoined={setIsJoined}
           onOpenProfile={() => setIsProfileOpen(true)}
@@ -258,22 +371,16 @@ export default function Home() {
       </div>
 
       <div className="flex-1 flex bg-slate-950 p-4 md:p-8 overflow-y-auto min-w-0">
-        {currentRoom && (
-          <UserList users={users} socket={socket} isDeafened={isDeafened} isMuted={isMuted} handleContextMenu={handleContextMenu} />
-        )}
+        <ChatArea
+          messages={messages}
+          newMessage={newMessage}
+          setNewMessage={handleMessageInput}
+          sendMessage={sendMessage}
+          userName={userName}
+          currentRoom={currentRoom}
+          typingLabel={typingLabel}
+        />
       </div>
-
-      {contextMenu && (
-        <div className="fixed z-50 bg-slate-900 border border-slate-700 shadow-2xl rounded-2xl p-2 w-48" style={{ top: contextMenu.y, left: contextMenu.x }}>
-          <button onClick={() => socket.emit("send-nudge", contextMenu.userId)} className="w-full text-left p-3 hover:bg-amber-500 rounded-xl text-xs font-black uppercase">👉 Dürt!</button>
-          <div className="p-3 border-t border-slate-800">
-            <input type="range" min="0" max="1" step="0.1" className="w-full" onChange={(e) => {
-              const v = parseFloat(e.target.value);
-              if (remoteAudios.current[contextMenu.userId]) remoteAudios.current[contextMenu.userId].volume = v;
-            }} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

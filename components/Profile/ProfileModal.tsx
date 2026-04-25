@@ -1,10 +1,24 @@
 "use client";
 import React, { useState } from "react";
 
-export default function ProfileModal({ isOpen, onClose, userData, onSave }: any) {
+type ProfileData = {
+  name: string;
+  bio: string;
+  status?: "online" | "idle" | "dnd";
+};
+
+interface ProfileModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  userData: ProfileData;
+  onSave: (data: ProfileData) => void;
+}
+
+export default function ProfileModal({ isOpen, onClose, userData, onSave }: ProfileModalProps) {
   const [bio, setBio] = useState(userData.bio || "");
   const [name, setName] = useState(userData.name || "");
-  const [status, setStatus] = useState("online");
+  const [status, setStatus] = useState<ProfileData["status"]>("online");
+  const statuses: Array<NonNullable<ProfileData["status"]>> = ["online", "idle", "dnd"];
 
   if (!isOpen) return null;
 
@@ -54,7 +68,7 @@ export default function ProfileModal({ isOpen, onClose, userData, onSave }: any)
             <div>
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Durum</label>
               <div className="flex gap-2 mt-1">
-                {['online', 'idle', 'dnd'].map((s) => (
+                {statuses.map((s) => (
                   <button 
                     key={s}
                     onClick={() => setStatus(s)}

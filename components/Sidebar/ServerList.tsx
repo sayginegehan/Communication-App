@@ -2,11 +2,13 @@
 import React from "react";
 
 interface ServerListProps {
-  servers: any[];
+  servers: { id: string; name: string }[];
   currentServer: string;
   setCurrentServer: (id: string) => void;
   userName: string;
-  socket: any;
+  socket: {
+    emit: (event: string, payload?: unknown, ack?: (response: { ok?: boolean; error?: string; serverId?: string }) => void) => void;
+  };
 }
 
 export default function ServerList({ servers, currentServer, setCurrentServer, userName, socket }: ServerListProps) {
