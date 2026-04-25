@@ -13,7 +13,7 @@ async function createRealtimeServer(env) {
     path: env.socketPath,
     cors: {
       origin: env.corsOriginValidator,
-      methods: ["GET", "POST"],
+      methods: ["GET", "POST", "OPTIONS"],
       credentials: true,
     },
   });

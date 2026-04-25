@@ -8,11 +8,21 @@ datasource db {
 }
 
 model Room {
-  id        String      @id @default(cuid())
-  roomId    String      @unique
-  createdAt DateTime    @default(now())
-  messages  Message[]
-  events    RoomEvent[]
+  id          String      @id @default(cuid())
+  roomId      String      @unique
+  type        String      @default("room")
+  serverId    String?
+  name        String?
+  description String?
+  topic       String?
+  deletedAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
+  messages    Message[]
+  events      RoomEvent[]
+
+  @@index([type, deletedAt])
+  @@index([serverId, deletedAt])
 }
 
 model Message {

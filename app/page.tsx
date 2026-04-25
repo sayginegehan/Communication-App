@@ -369,6 +369,7 @@ export default function Home() {
 
         <ControlBar isMuted={isMuted} isDeafened={isDeafened} toggleMute={toggleMute} toggleDeafen={toggleDeafen} />
       </div>
+      </div>
 
       <div className="flex-1 flex bg-slate-950 p-4 md:p-8 overflow-y-auto min-w-0">
         <ChatArea

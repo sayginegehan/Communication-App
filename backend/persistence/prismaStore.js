@@ -59,18 +59,130 @@ class PrismaStore {
   }
 
   async touchRoom(roomId) {
+    const splitIndex = roomId.indexOf("::");
+    const serverId = splitIndex === -1 ? "default" : roomId.slice(0, splitIndex);
+    const roomName = splitIndex === -1 ? roomId : roomId.slice(splitIndex + 2);
     await this.prisma.room.upsert({
       where: { roomId },
-      update: {},
-      create: { roomId },
+      update: {
+        type: roomId.startsWith("__") ? "meta" : "room",
+        serverId,
+        name: roomName,
+      },
+      create: {
+        roomId,
+        type: roomId.startsWith("__") ? "meta" : "room",
+        serverId,
+        name: roomName,
+      },
     });
   }
 
-  async listRooms() {
+  async upsertServer(serverId, data = {}) {
+    const roomId = `__server__:${serverId}`;
+    return this.prisma.room.upsert({
+      where: { roomId },
+      update: {
+        type: "server",
+        serverId,
+        name: data.name || serverId,
+        description: data.description || "",
+        deletedAt: Object.prototype.hasOwnProperty.call(data, "deletedAt")
+          ? data.deletedAt
+          : undefined,
+      },
+      create: {
+        roomId,
+        type: "server",
+        serverId,
+        name: data.name || serverId,
+        description: data.description || "",
+        deletedAt: Object.prototype.hasOwnProperty.call(data, "deletedAt")
+          ? data.deletedAt
+          : null,
+      },
+    });
+  }
+
+  async upsertRoomSettings(roomId, data = {}) {
+    const splitIndex = roomId.indexOf("::");
+    const serverId = splitIndex === -1 ? "default" : roomId.slice(0, splitIndex);
+    const roomName = splitIndex === -1 ? roomId : roomId.slice(splitIndex + 2);
+    return this.prisma.room.upsert({
+      where: { roomId },
+      update: {
+        type: "room",
+        serverId,
+        name: data.name || roomName,
+        topic: data.topic || "",
+        deletedAt: Object.prototype.hasOwnProperty.call(data, "deletedAt")
+          ? data.deletedAt
+          : undefined,
+      },
+      create: {
+        roomId,
+        type: "room",
+        serverId,
+        name: data.name || roomName,
+        topic: data.topic || "",
+        deletedAt: Object.prototype.hasOwnProperty.call(data, "deletedAt")
+          ? data.deletedAt
+          : null,
+      },
+    });
+  }
+
+  async listServers({ includeDeleted = false } = {}) {
     return this.prisma.room.findMany({
-      select: { roomId: true },
+      where: {
+        type: "server",
+        ...(includeDeleted ? {} : { deletedAt: null }),
+      },
+      select: {
+        serverId: true,
+        name: true,
+        description: true,
+        deletedAt: true,
+      },
       orderBy: { createdAt: "asc" },
     });
+  }
+
+  async listRooms({ includeDeleted = false } = {}) {
+    return this.prisma.room.findMany({
+      where: {
+        type: "room",
+        ...(includeDeleted ? {} : { deletedAt: null }),
+      },
+      select: {
+        roomId: true,
+        serverId: true,
+        name: true,
+        topic: true,
+        deletedAt: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async listRoleMarkers() {
+    return this.prisma.room.findMany({
+      where: {
+        type: "meta",
+        roomId: {
+          startsWith: "__role__:",
+        },
+      },
+      select: { roomId: true },
+    });
+  }
+
+  async softDeleteServer(serverId) {
+    await this.prisma.room.updateMany({
+      where: { serverId },
+      data: { deletedAt: new Date() },
+    });
+    await this.upsertServer(serverId, { deletedAt: new Date() });
   }
 
   async deleteRoom(roomId) {

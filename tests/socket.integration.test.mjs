@@ -265,4 +265,77 @@ describe("socket flows", () => {
     owner.disconnect();
     member.disconnect();
   });
+
+  it("updates server and room settings", async () => {
+    const owner = await connectClient(baseUrl);
+    await emitWithAck(owner, "create-server", {
+      serverName: "TakimE",
+      userName: "ownere",
+    });
+    await emitWithAck(owner, "create-room", {
+      serverId: "takime",
+      roomName: "genel",
+      userName: "ownere",
+    });
+
+    const updateServer = await emitWithAck(owner, "update-server-settings", {
+      serverId: "takime",
+      actorUserName: "ownere",
+      name: "TakimE2",
+      description: "Aciklama",
+    });
+    expect(updateServer.ok).toBe(true);
+
+    const updateRoom = await emitWithAck(owner, "update-room-settings", {
+      serverId: "takime",
+      roomName: "genel",
+      actorUserName: "ownere",
+      name: "genel2",
+      topic: "duyurular",
+    });
+    expect(updateRoom.ok).toBe(true);
+    owner.disconnect();
+  });
+
+  it("soft-deletes room and server", async () => {
+    const owner = await connectClient(baseUrl);
+    await emitWithAck(owner, "create-server", {
+      serverName: "TakimF",
+      userName: "ownerf",
+    });
+    await emitWithAck(owner, "create-room", {
+      serverId: "takimf",
+      roomName: "silinecek",
+      userName: "ownerf",
+    });
+
+    const deleteRoom = await emitWithAck(owner, "delete-room", {
+      serverId: "takimf",
+      roomName: "silinecek",
+      actorUserName: "ownerf",
+    });
+    expect(deleteRoom.ok).toBe(true);
+
+    const deleteServer = await emitWithAck(owner, "delete-server", {
+      serverId: "takimf",
+      actorUserName: "ownerf",
+      targetUserName: "ownerf",
+    });
+    expect(deleteServer.ok).toBe(true);
+
+    const restoreServer = await emitWithAck(owner, "restore-server", {
+      serverId: "takimf",
+      actorUserName: "ownerf",
+      targetUserName: "ownerf",
+    });
+    expect(restoreServer.ok).toBe(true);
+
+    const restoreRoom = await emitWithAck(owner, "restore-room", {
+      serverId: "takimf",
+      roomName: "silinecek",
+      actorUserName: "ownerf",
+    });
+    expect(restoreRoom.ok).toBe(true);
+    owner.disconnect();
+  });
 });

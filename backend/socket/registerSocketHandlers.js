@@ -10,8 +10,12 @@ const {
   deleteRoomSchema,
   typingSchema,
   roleChangeSchema,
+  updateServerSettingsSchema,
+  updateRoomSettingsSchema,
   parseOrThrow,
 } = require("../validation/schemas");
+const { getPrismaClient } = require("../lib/prisma");
+const { verifyAuthToken } = require("../lib/jwt");
 
 function buildChatMessage(user, text) {
   return {
@@ -24,10 +28,6 @@ function buildChatMessage(user, text) {
 
 function normalizeServerId(value) {
   return value.toLowerCase().replace(/[^a-z0-9-_]/g, "-").replace(/-+/g, "-");
-}
-
-function buildServerMarker(serverId) {
-  return `__server__:${serverId}`;
 }
 
 function buildRoleMarker(serverId, role, userName) {
@@ -54,6 +54,14 @@ function buildPersistedRoomId(serverId, roomName) {
   return `${serverId}::${roomName}`;
 }
 
+/** JsonStore uses `id`; PrismaStore uses `serverId`. */
+function storeServerKey(server) {
+  if (!server) {
+    return "default";
+  }
+  return server.serverId || server.id || "default";
+}
+
 function parsePersistedRoomId(persistedRoomId) {
   if (
     persistedRoomId.startsWith("__server__:") ||
@@ -73,16 +81,15 @@ function parsePersistedRoomId(persistedRoomId) {
 }
 
 async function emitServerList(io, store, targetSocket = null) {
-  const rooms = await store.listRooms();
-  const servers = rooms
-    .map(({ roomId }) => roomId)
-    .filter((roomId) => roomId.startsWith("__server__:"))
-    .map((roomId) => {
-      const serverId = roomId.replace("__server__:", "");
-      return { id: serverId, name: serverId };
-    });
+  const servers = (await store.listServers?.()) || [];
+  const normalized = servers.map((server) => ({
+    id: storeServerKey(server),
+    name: server.name || storeServerKey(server),
+    description: server.description || "",
+    isDeleted: Boolean(server.deletedAt),
+  }));
 
-  const deduped = Array.from(new Map(servers.map((s) => [s.id, s])).values());
+  const deduped = Array.from(new Map(normalized.map((s) => [s.id, s])).values());
   if (!deduped.some((server) => server.id === "default")) {
     deduped.unshift({ id: "default", name: "default" });
   }
@@ -95,7 +102,7 @@ async function emitServerList(io, store, targetSocket = null) {
 }
 
 async function getUserRoleInServer(store, serverId, userName) {
-  const rooms = await store.listRooms();
+  const rooms = (await store.listRoleMarkers?.()) || [];
   const normalizedUser = userName.toLowerCase();
   const markers = rooms
     .map(({ roomId }) => parseRoleMarker(roomId))
@@ -112,6 +119,60 @@ async function getUserRoleInServer(store, serverId, userName) {
     return "member";
   }
   return null;
+}
+
+function can(action, role) {
+  const matrix = {
+    owner: new Set([
+      "server:update",
+      "server:delete",
+      "room:create",
+      "room:update",
+      "room:delete",
+      "room:restore",
+      "server:restore",
+      "role:promote",
+      "role:demote",
+      "role:transfer",
+    ]),
+    admin: new Set([
+      "server:update",
+      "room:create",
+      "room:update",
+      "room:delete",
+      "room:restore",
+    ]),
+    mod: new Set(["room:update"]),
+    member: new Set([]),
+  };
+  return matrix[role || "member"]?.has(action) || false;
+}
+
+async function emitArchivedState(io, store, targetSocket = null) {
+  const archivedServers = ((await store.listServers({ includeDeleted: true })) || [])
+    .filter((server) => Boolean(server.deletedAt))
+    .map((server) => ({
+      id: storeServerKey(server),
+      name: server.name || storeServerKey(server),
+      description: server.description || "",
+    }));
+
+  const archivedRooms = ((await store.listRooms({ includeDeleted: true })) || [])
+    .filter((room) => Boolean(room.deletedAt))
+    .map((room) => ({
+      serverId: room.serverId || "default",
+      name: room.name || parsePersistedRoomId(room.roomId)?.roomName || room.roomId,
+      topic: room.topic || "",
+    }));
+
+  if (targetSocket) {
+    targetSocket.emit("archived-server-list", archivedServers);
+    targetSocket.emit("archived-room-list", archivedRooms);
+    return;
+  }
+
+  io.emit("archived-server-list", archivedServers);
+  io.emit("archived-room-list", archivedRooms);
 }
 
 async function setUserRoleInServer(store, serverId, userName, role) {
@@ -133,14 +194,12 @@ async function emitRoomList(io, state, store, targetSocket = null) {
   );
   const persistedRooms = await store.listRooms();
 
-  const mergedRooms = persistedRooms
-    .map(({ roomId }) => ({ roomId, parsed: parsePersistedRoomId(roomId) }))
-    .filter((entry) => entry.parsed !== null)
-    .map((entry) => ({
-      name: entry.parsed.roomName,
-      serverId: entry.parsed.serverId,
-      count: onlineCounts.get(entry.roomId) || 0,
-    }));
+  const mergedRooms = persistedRooms.map((entry) => ({
+    name: entry.name || parsePersistedRoomId(entry.roomId)?.roomName || entry.roomId,
+    serverId: entry.serverId || parsePersistedRoomId(entry.roomId)?.serverId || "default",
+    topic: entry.topic || "",
+    count: onlineCounts.get(entry.roomId) || 0,
+  }));
 
   for (const [name, count] of onlineCounts.entries()) {
     const parsed = parsePersistedRoomId(name);
@@ -188,10 +247,73 @@ function registerSocketHandlers(io, { state, store, env }) {
   io.on("connection", async (socket) => {
     await emitServerList(io, store, socket);
     await emitRoomList(io, state, store, socket);
+    await emitArchivedState(io, store, socket);
 
     socket.on("request-state", async () => {
       await emitServerList(io, store, socket);
       await emitRoomList(io, state, store, socket);
+      await emitArchivedState(io, store, socket);
+    });
+
+    socket.on("join_channel", async ({ channelId }, ack) => {
+      try {
+        if (!channelId) throw new Error("channelId required");
+        socket.join(`channel:${channelId}`);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("leave_channel", async ({ channelId }, ack) => {
+      try {
+        if (!channelId) throw new Error("channelId required");
+        socket.leave(`channel:${channelId}`);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("typing_start", ({ channelId, username }) => {
+      if (!channelId) return;
+      socket.to(`channel:${channelId}`).emit("typing_start", { channelId, username });
+    });
+
+    socket.on("typing_stop", ({ channelId, username }) => {
+      if (!channelId) return;
+      socket.to(`channel:${channelId}`).emit("typing_stop", { channelId, username });
+    });
+
+    socket.on("send_message", async ({ channelId, content }, ack) => {
+      try {
+        if (!channelId || !content) throw new Error("channelId and content required");
+        const prisma = getPrismaClient();
+        const token = socket.handshake.auth?.token;
+        if (!token) throw new Error("Auth token required");
+        const decoded = verifyAuthToken(token);
+        const membership = await prisma.serverMember.findFirst({
+          where: {
+            userId: decoded.sub,
+            server: { channels: { some: { id: channelId } } },
+          },
+        });
+        if (!membership) throw new Error("Not a member of this channel");
+        const message = await prisma.channelMessage.create({
+          data: { channelId, userId: decoded.sub, content },
+          include: { user: { select: { id: true, username: true } } },
+        });
+        io.to(`channel:${channelId}`).emit("new_message", {
+          id: message.id,
+          channelId: message.channelId,
+          content: message.content,
+          createdAt: message.createdAt,
+          user: message.user,
+        });
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
     });
 
     socket.on("create-server", async (payload, ack) => {
@@ -202,11 +324,12 @@ function registerSocketHandlers(io, { state, store, env }) {
           "create-server"
         );
         const serverId = normalizeServerId(serverName);
-        await store.touchRoom(buildServerMarker(serverId));
+        await store.upsertServer(serverId, { name: serverName, description: "" });
         await store.touchRoom(buildRoleMarker(serverId, "owner", userName));
         await store.touchRoom(buildRoleMarker(serverId, "member", userName));
         await emitServerList(io, store);
         await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
         if (typeof ack === "function") {
           ack({ ok: true, serverId });
         }
@@ -226,12 +349,16 @@ function registerSocketHandlers(io, { state, store, env }) {
         );
         const normalizedServerId = normalizeServerId(serverId);
         const role = await getUserRoleInServer(store, normalizedServerId, userName);
-        if (normalizedServerId !== "default" && !["owner", "admin"].includes(role || "")) {
+        if (normalizedServerId !== "default" && !can("room:create", role)) {
           throw new Error("Insufficient permission: only owner/admin can create rooms");
         }
-        await store.touchRoom(buildServerMarker(normalizedServerId));
-        await store.touchRoom(buildPersistedRoomId(normalizedServerId, roomName));
+        await store.upsertServer(normalizedServerId, { name: normalizedServerId });
+        await store.upsertRoomSettings(buildPersistedRoomId(normalizedServerId, roomName), {
+          name: roomName,
+          topic: "",
+        });
         await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
         if (typeof ack === "function") {
           ack({ ok: true });
         }
@@ -310,9 +437,9 @@ function registerSocketHandlers(io, { state, store, env }) {
         }
 
         socket.join(persistedRoomId);
-        await store.touchRoom(buildServerMarker(normalizedServerId));
+        await store.upsertServer(normalizedServerId, { name: normalizedServerId });
         await store.touchRoom(buildRoleMarker(normalizedServerId, "member", userName));
-        await store.touchRoom(persistedRoomId);
+        await store.upsertRoomSettings(persistedRoomId, { name: roomId });
         const role = await getUserRoleInServer(store, normalizedServerId, userName);
         state.upsertUser(socket.id, {
           id: socket.id,
@@ -337,6 +464,7 @@ function registerSocketHandlers(io, { state, store, env }) {
         socket.to(persistedRoomId).emit("user-joined", socket.id);
         await emitServerList(io, store);
         await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
         emitUserList(io, state, persistedRoomId);
         if (typeof ack === "function") {
           ack({ ok: true });
@@ -358,7 +486,7 @@ function registerSocketHandlers(io, { state, store, env }) {
         const normalizedServerId = normalizeServerId(serverId);
         const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName);
         const targetRole = await getUserRoleInServer(store, normalizedServerId, targetUserName);
-        if (actorRole !== "owner") {
+        if (!can("role:promote", actorRole)) {
           throw new Error("Only owner can promote members");
         }
         if (targetRole === "owner") {
@@ -397,7 +525,7 @@ function registerSocketHandlers(io, { state, store, env }) {
         const normalizedServerId = normalizeServerId(serverId);
         const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName);
         const targetRole = await getUserRoleInServer(store, normalizedServerId, targetUserName);
-        if (actorRole !== "owner") {
+        if (!can("role:demote", actorRole)) {
           throw new Error("Only owner can demote admins");
         }
         if (targetRole === "owner") {
@@ -436,7 +564,7 @@ function registerSocketHandlers(io, { state, store, env }) {
         const normalizedServerId = normalizeServerId(serverId);
         const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName);
         const targetRole = await getUserRoleInServer(store, normalizedServerId, targetUserName);
-        if (actorRole !== "owner") {
+        if (!can("role:transfer", actorRole)) {
           throw new Error("Only owner can transfer ownership");
         }
         if (!targetRole) {
@@ -463,6 +591,143 @@ function registerSocketHandlers(io, { state, store, env }) {
         if (typeof ack === "function") {
           ack({ ok: false, error: error.message });
         }
+      }
+    });
+
+    socket.on("update-server-settings", async (payload, ack) => {
+      try {
+        const { serverId, actorUserName, name, description } = parseOrThrow(
+          updateServerSettingsSchema,
+          payload,
+          "update-server-settings"
+        );
+        const normalizedServerId = normalizeServerId(serverId || "");
+        const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName || "");
+        if (!can("server:update", actorRole)) {
+          throw new Error("Insufficient permission for server update");
+        }
+        await store.upsertServer(normalizedServerId, { name, description });
+        await emitServerList(io, store);
+        await emitArchivedState(io, store);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("delete-server", async (payload, ack) => {
+      try {
+        const { serverId, actorUserName } = parseOrThrow(
+          roleChangeSchema,
+          payload,
+          "delete-server"
+        );
+        const normalizedServerId = normalizeServerId(serverId || "");
+        const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName || "");
+        if (!can("server:delete", actorRole)) {
+          throw new Error("Insufficient permission for server delete");
+        }
+        await store.softDeleteServer(normalizedServerId);
+        await emitServerList(io, store);
+        await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("update-room-settings", async (payload, ack) => {
+      try {
+        const { serverId, roomName, actorUserName, name, topic } = parseOrThrow(
+          updateRoomSettingsSchema,
+          payload,
+          "update-room-settings"
+        );
+        const normalizedServerId = normalizeServerId(serverId || "");
+        const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName || "");
+        if (!can("room:update", actorRole)) {
+          throw new Error("Insufficient permission for room update");
+        }
+        const roomId = buildPersistedRoomId(normalizedServerId, roomName);
+        await store.upsertRoomSettings(roomId, { name, topic });
+        await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("delete-room", async (payload, ack) => {
+      try {
+        const { serverId, roomName, actorUserName } = parseOrThrow(
+          updateRoomSettingsSchema.pick({ serverId: true, roomName: true, actorUserName: true }),
+          payload,
+          "delete-room"
+        );
+        const normalizedServerId = normalizeServerId(serverId || "");
+        const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName || "");
+        if (!can("room:delete", actorRole)) {
+          throw new Error("Insufficient permission for room delete");
+        }
+        const roomId = buildPersistedRoomId(normalizedServerId, roomName);
+        await store.upsertRoomSettings(roomId, { deletedAt: new Date() });
+        await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("restore-server", async (payload, ack) => {
+      try {
+        const { serverId, actorUserName } = parseOrThrow(
+          roleChangeSchema,
+          payload,
+          "restore-server"
+        );
+        const normalizedServerId = normalizeServerId(serverId);
+        const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName);
+        if (!can("server:restore", actorRole)) {
+          throw new Error("Insufficient permission for server restore");
+        }
+        await store.upsertServer(normalizedServerId, { deletedAt: null });
+        const allRooms = await store.listRooms({ includeDeleted: true });
+        for (const room of allRooms) {
+          if (room.serverId === normalizedServerId && room.deletedAt) {
+            await store.upsertRoomSettings(room.roomId, { deletedAt: null });
+          }
+        }
+        await emitServerList(io, store);
+        await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
+    socket.on("restore-room", async (payload, ack) => {
+      try {
+        const { serverId, roomName, actorUserName } = parseOrThrow(
+          updateRoomSettingsSchema.pick({ serverId: true, roomName: true, actorUserName: true }),
+          payload,
+          "restore-room"
+        );
+        const normalizedServerId = normalizeServerId(serverId);
+        const actorRole = await getUserRoleInServer(store, normalizedServerId, actorUserName);
+        if (!can("room:restore", actorRole)) {
+          throw new Error("Insufficient permission for room restore");
+        }
+        const roomId = buildPersistedRoomId(normalizedServerId, roomName);
+        await store.upsertRoomSettings(roomId, { deletedAt: null });
+        await emitRoomList(io, state, store);
+        await emitArchivedState(io, store);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
       }
     });
 
