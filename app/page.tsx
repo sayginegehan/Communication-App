@@ -32,7 +32,7 @@ export default function Home() {
   const [activeRooms, setActiveRooms] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [isMuted, setIsMuted] = useState(false);
-  const [isDeafened, setIsDeafened] = useState(false); // Kulaklık durumu
+  const [isDeafened, setIsDeafened] = useState(false); 
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -105,7 +105,6 @@ export default function Home() {
   const createPeer = (targetId: string, isInitiator: boolean) => {
     if (peerConnections.current[targetId]) return peerConnections.current[targetId];
     const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-    
     pc.onicecandidate = (e) => e.candidate && socket.emit("ice-candidate", { candidate: e.candidate, to: targetId });
     pc.ontrack = (e) => {
       if (e.track.kind === "video") {
@@ -116,12 +115,10 @@ export default function Home() {
         audio.autoplay = true;
         audio.volume = userVolumes[targetId] ?? 1.0;
         remoteAudios.current[targetId] = audio;
-        // Kulaklık kapalıysa sesi kıs
         if (isDeafened) audio.muted = true;
         document.body.appendChild(audio);
       }
     };
-
     pc.onnegotiationneeded = async () => {
         try {
             if (isInitiator) {
@@ -131,10 +128,8 @@ export default function Home() {
             }
         } catch (err) {}
     };
-
     localStream.current?.getTracks().forEach(t => pc.addTrack(t, localStream.current!));
     if (screenStream.current) screenStream.current.getTracks().forEach(t => pc.addTrack(t, screenStream.current!));
-    
     peerConnections.current[targetId] = pc;
     return pc;
   };
@@ -228,11 +223,10 @@ export default function Home() {
     }
   };
 
-  // KULAKLIK KAPATMA FONKSİYONU
   const toggleDeafen = () => {
     const newDeafenStatus = !isDeafened;
     setIsDeafened(newDeafenStatus);
-    // Gelen seslerin tamamını sustur
+    socket.emit("deafen-status", newDeafenStatus); // Backend'e bildir
     Object.values(remoteAudios.current).forEach(audio => {
         audio.muted = newDeafenStatus;
     });
@@ -242,12 +236,11 @@ export default function Home() {
   const filteredRooms = activeRooms.filter((room) => (room.serverId || "default") === currentServer);
   const roomsToRender = filteredRooms.length > 0 ? filteredRooms : activeRooms;
 
-  // --- KAYAN AUTH EKRANI ---
+  // --- AUTH EKRANI ---
   if (!isJoined) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 font-sans overflow-hidden">
-        <div className="relative w-full max-w-[900px] h-[600px] bg-slate-900 rounded-[60px] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-slate-800 flex">
-          
+        <div className="relative w-full max-w-[900px] h-[600px] bg-slate-900 rounded-[60px] overflow-hidden shadow-2xl border border-slate-800 flex">
           <div className={`w-1/2 h-full flex flex-col items-center justify-center p-14 transition-all duration-700 ease-in-out z-10 ${!isLoginActive ? 'translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'}`}>
             <h2 className="text-4xl font-black text-rose-500 mb-10 uppercase tracking-tighter">Giriş Yap</h2>
             <div className="w-full space-y-5">
@@ -256,7 +249,6 @@ export default function Home() {
               <button onClick={() => { if(email && password) { setUserName(email.split('@')[0]); setIsJoined(true); }}} className="w-full bg-rose-600 text-white p-5 rounded-2xl font-black text-lg hover:bg-rose-700 shadow-xl active:scale-95 transition-all">BAĞLAN</button>
             </div>
           </div>
-
           <div className={`w-1/2 h-full flex flex-col items-center justify-center p-14 transition-all duration-700 ease-in-out z-10 ${isLoginActive ? '-translate-x-full opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'}`}>
             <h2 className="text-4xl font-black text-sky-500 mb-10 uppercase tracking-tighter">Kayıt Ol</h2>
             <div className="w-full space-y-5">
@@ -266,27 +258,11 @@ export default function Home() {
               <button onClick={() => { if(userName && email && password) setIsLoginActive(true); }} className="w-full bg-sky-600 text-white p-5 rounded-2xl font-black text-lg hover:bg-sky-700 shadow-xl active:scale-95 transition-all">HESAP OLUŞTUR</button>
             </div>
           </div>
-
-          <div 
-            className={`absolute top-0 w-1/2 h-full bg-gradient-to-br from-rose-600 to-rose-900 z-20 transition-all duration-700 ease-in-out flex flex-col items-center justify-center text-white px-14 text-center
-            ${isLoginActive ? 'left-1/2 rounded-l-[120px]' : 'left-0 rounded-r-[120px]'}`}
-          >
-            <h1 className="text-5xl font-black tracking-tighter mb-10 leading-none uppercase">
-              {isLoginActive ? "TEKRAR\nSELAM!" : "MERHABA,\nDUMBASS!"}
-            </h1>
-            <p className="text-rose-100 text-base mb-10 font-medium leading-relaxed">
-              {isLoginActive 
-                ? "Zaten bu çılgın topluluğun bir parçasıysan, hemen giriş yap ve kaldığın yerden devam et." 
-                : "Henüz bir hesabın yoksa, kaosun ve eğlencenin merkezine katılmak için hemen kayıt ol!"}
-            </p>
-            <button 
-              onClick={() => setIsLoginActive(!isLoginActive)}
-              className="border-[3px] border-white px-12 py-4 rounded-full font-black uppercase text-sm hover:bg-white hover:text-rose-700 transition-all active:scale-90 shadow-2xl"
-            >
-              {isLoginActive ? "Kayıt Olmaya Git" : "Giriş Yapmaya Git"}
-            </button>
+          <div className={`absolute top-0 w-1/2 h-full bg-gradient-to-br from-rose-600 to-rose-900 z-20 transition-all duration-700 ease-in-out flex flex-col items-center justify-center text-white px-14 text-center ${isLoginActive ? 'left-1/2 rounded-l-[120px]' : 'left-0 rounded-r-[120px]'}`}>
+            <h1 className="text-5xl font-black tracking-tighter mb-10 leading-none uppercase">{isLoginActive ? "TEKRAR\nSELAM!" : "MERHABA,\nDUMBASS!"}</h1>
+            <p className="text-rose-100 text-base mb-10 font-medium leading-relaxed">{isLoginActive ? "Zaten bu çılgın topluluğun bir parçasıysan, hemen giriş yap ve kaldığın yerden devam et." : "Henüz bir hesabın yoksa, kaosun ve eğlencenin merkezine katılmak için hemen kayıt ol!"}</p>
+            <button onClick={() => setIsLoginActive(!isLoginActive)} className="border-[3px] border-white px-12 py-4 rounded-full font-black uppercase text-sm hover:bg-white hover:text-rose-700 transition-all active:scale-90 shadow-2xl">{isLoginActive ? "Kayıt Olmaya Git" : "Giriş Yapmaya Git"}</button>
           </div>
-
         </div>
       </div>
     );
@@ -344,7 +320,6 @@ export default function Home() {
           </div>
         </div>
         
-        {/* YENİLENEN ALT PANEL */}
         <div className="p-4 bg-slate-800/50 border-t border-slate-800 space-y-3">
           <button onClick={toggleDeafen} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isDeafened ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-white'}`}>
             {isDeafened ? "Kulaklığı Aç" : "Kulaklığı Sustur"}
@@ -378,11 +353,30 @@ export default function Home() {
                 <div className="flex flex-col gap-3">
                   {users.map((u) => (
                     <div key={u.id} onContextMenu={(e) => handleContextMenu(e, u.id)} className={`p-4 rounded-3xl border-4 flex items-center gap-5 transition-all duration-300 relative cursor-context-menu w-80 ${u.isSpeaking ? 'border-sky-500 bg-sky-950/20' : 'border-slate-800 bg-slate-900'} shadow-lg`}>
-                      {u.isMuted && (
-                        <div className="absolute top-3 right-4 bg-rose-600/20 p-1.5 rounded-full border border-rose-500/40 shadow-inner z-20">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-                        </div>
-                      )}
+                      
+                      {/* DURUM SİMGELERİ (ÜST SAĞ) */}
+                      <div className="absolute top-3 right-4 flex gap-2 z-20">
+                          {u.isDeafened && (
+                            <div className="bg-amber-500/20 p-1.5 rounded-full border border-amber-500/40 shadow-inner">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm13 0h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-5Z" />
+                                  <path d="M21 11V7a9 9 0 0 0-18 0v4" />
+                                  <line x1="2" y1="2" x2="22" y2="22" />
+                                </svg>
+                            </div>
+                          )}
+                          {u.isMuted && (
+                            <div className="bg-rose-600/20 p-1.5 rounded-full border border-rose-500/40 shadow-inner">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                                  <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+                                  <line x1="12" y1="19" x2="12" y2="22" />
+                                  <line x1="2" y1="2" x2="22" y2="22" />
+                                </svg>
+                            </div>
+                          )}
+                      </div>
+
                       <div className={`w-14 h-14 rounded-full flex items-center justify-center text-2xl font-black shrink-0 transition-all duration-300 ${u.isSpeaking ? 'bg-sky-600 text-white shadow-lg' : 'bg-slate-700 text-slate-400'}`}>{u.name ? u.name[0].toUpperCase() : "?"}</div>
                       <div className="flex flex-col min-w-0">
                         <span className="font-black text-base text-slate-200 tracking-tight leading-none uppercase truncate">{u.name} {u.id === socket.id && <span className="text-sky-500 text-[10px] ml-1">(SEN)</span>}</span>
