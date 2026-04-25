@@ -366,7 +366,7 @@ export default function Home() {
                       <div className="absolute top-3 right-4 flex flex-row-reverse gap-1.5 z-20">
                           {u.isDeafened && (
                             <div className="bg-amber-500/20 p-1.5 rounded-full border border-amber-500/40 shadow-inner flex items-center justify-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm13 0h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-5Z" />
                                   <path d="M21 11V7a9 9 0 0 0-18 0v4" />
                                   <line x1="2" y1="2" x2="22" y2="22" />
@@ -375,7 +375,7 @@ export default function Home() {
                           )}
                           {u.isMuted && (
                             <div className="bg-rose-600/20 p-1.5 rounded-full border border-rose-500/40 shadow-inner flex items-center justify-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
                                   <line x1="12" y1="19" x2="12" y2="23"/>
