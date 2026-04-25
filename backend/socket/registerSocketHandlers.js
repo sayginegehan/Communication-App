@@ -637,7 +637,7 @@ function registerSocketHandlers(io, { state, store, env }) {
           normalizedServerId,
           actorName
         );
-        if (!can("room:delete", actorRole)) {
+        if (normalizedServerId !== "default" && !can("room:delete", actorRole)) {
           throw new Error("Insufficient permission for room delete");
         }
         const roomId = buildPersistedRoomId(normalizedServerId, roomName);
