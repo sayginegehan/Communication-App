@@ -16,8 +16,9 @@ const socket = io(socketServerUrl, {
 });
 
 export default function Home() {
-  // AUTH DURUMLARI
-  const [authState, setAuthState] = useState<"login" | "register" | "chat">("login");
+  // AUTH DURUMLARI (KAYAN PANEL İÇİN)
+  const [isLoginActive, setIsLoginActive] = useState(true); 
+  const [isJoined, setIsJoined] = useState(false); // Chat'e giriş kontrolü
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [userName, setUserName] = useState("");
@@ -236,58 +237,73 @@ export default function Home() {
   const filteredRooms = activeRooms.filter((room) => (room.serverId || "default") === currentServer);
   const roomsToRender = filteredRooms.length > 0 ? filteredRooms : activeRooms;
 
-  // --- AUTH EKRANLARI ---
-
-  // GİRİŞ EKRANI
-  if (authState === "login") {
+  // --- KAYAN AUTH EKRANI ---
+  if (!isJoined) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white font-sans">
-        <div className="w-full max-w-sm bg-slate-900 p-10 rounded-[40px] shadow-2xl border border-slate-800">
-          <h1 className="text-4xl font-black text-rose-500 text-center mb-8 tracking-tighter">Giriş Yap</h1>
-          <div className="space-y-4">
-            <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-rose-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-rose-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button onClick={() => { if(email && password) { setUserName(email.split('@')[0]); setAuthState("chat"); } }} className="w-full bg-rose-600 text-white p-4 rounded-2xl font-black hover:bg-rose-700 transition-all shadow-lg">GİRİŞ YAP</button>
-            <p className="text-center text-xs text-slate-500">Hesabın yok mu? <button onClick={() => setAuthState("register")} className="text-rose-500 font-bold hover:underline">Kayıt Ol</button></p>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 font-sans">
+        <div className="relative w-[850px] h-[550px] bg-slate-900 rounded-[50px] overflow-hidden shadow-2xl border border-slate-800 flex">
+          
+          {/* Overlay Panel (Kayan Kırmızı Kısım) */}
+          <div 
+            className={`absolute top-0 w-1/2 h-full bg-gradient-to-br from-rose-600 to-rose-800 z-30 transition-all duration-700 ease-in-out flex flex-col items-center justify-center text-white px-12 text-center
+            ${isLoginActive ? 'left-0 rounded-r-[100px]' : 'left-1/2 rounded-l-[100px]'}`}
+          >
+            <h1 className="text-4xl font-black tracking-tighter mb-4">
+              {isLoginActive ? "Merhaba, Dumbass!" : "Tekrar Selam!"}
+            </h1>
+            <p className="text-rose-100 text-sm mb-8">
+              {isLoginActive ? "Hesabın yoksa hemen oluştur ve kaosa ortak ol." : "Zaten buralardaysan hemen giriş yap ve sohbete başla."}
+            </p>
+            <button 
+              onClick={() => setIsLoginActive(!isLoginActive)}
+              className="border-2 border-white px-10 py-3 rounded-full font-black uppercase text-xs hover:bg-white hover:text-rose-600 transition-all active:scale-95"
+            >
+              {isLoginActive ? "KAYIT OL" : "GİRİŞ YAP"}
+            </button>
           </div>
+
+          {/* Giriş Formu (Sağda) */}
+          <div className={`w-1/2 h-full flex flex-col items-center justify-center p-12 transition-all duration-700 ${isLoginActive ? 'ml-auto' : 'opacity-0 pointer-events-none'}`}>
+            <h2 className="text-3xl font-black text-rose-500 mb-8 uppercase tracking-tighter">Giriş Yap</h2>
+            <div className="w-full space-y-4">
+              <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-rose-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-rose-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button onClick={() => { if(email && password) { setUserName(email.split('@')[0]); setIsJoined(true); }}} className="w-full bg-rose-600 text-white p-4 rounded-2xl font-black hover:bg-rose-700 shadow-lg active:scale-95 transition-all">BAĞLAN</button>
+              <button onClick={() => setIsLoginActive(false)} className="w-full text-center text-slate-500 text-xs mt-4 hover:text-rose-500 font-bold transition-colors underline decoration-dotted">Hesabın yok mu? Kayıt Ol</button>
+            </div>
+          </div>
+
+          {/* Kayıt Formu (Solda) */}
+          <div className={`w-1/2 h-full flex flex-col items-center justify-center p-12 transition-all duration-700 ${!isLoginActive ? 'mr-auto' : 'opacity-0 pointer-events-none'}`}>
+            <h2 className="text-3xl font-black text-sky-500 mb-8 uppercase tracking-tighter">Kayıt Ol</h2>
+            <div className="w-full space-y-4">
+              <input type="text" placeholder="Takma Ad" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all" value={userName} onChange={(e) => setUserName(e.target.value)} />
+              <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl text-white outline-none focus:border-sky-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button onClick={() => { if(userName && email && password) setIsLoginActive(true); }} className="w-full bg-sky-600 text-white p-4 rounded-2xl font-black hover:bg-sky-700 shadow-lg active:scale-95 transition-all">KAYIT OL</button>
+              <button onClick={() => setIsLoginActive(true)} className="w-full text-center text-slate-500 text-xs mt-4 hover:text-sky-500 font-bold transition-colors underline decoration-dotted">Zaten üye misin? Giriş Yap</button>
+            </div>
+          </div>
+
         </div>
       </div>
     );
   }
 
-  // KAYIT EKRANI
-  if (authState === "register") {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white font-sans">
-        <div className="w-full max-w-sm bg-slate-900 p-10 rounded-[40px] shadow-2xl border border-slate-800">
-          <h1 className="text-4xl font-black text-sky-500 text-center mb-8 tracking-tighter">Hesap Oluştur</h1>
-          <div className="space-y-4">
-            <input type="text" placeholder="Kullanıcı Adı" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-sky-500 transition-all" value={userName} onChange={(e) => setUserName(e.target.value)} />
-            <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-sky-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-sky-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button onClick={() => { if(userName && email && password) setAuthState("login"); }} className="w-full bg-sky-600 text-white p-4 rounded-2xl font-black hover:bg-sky-700 transition-all shadow-lg">KAYIT OL</button>
-            <p className="text-center text-xs text-slate-500">Zaten üye misin? <button onClick={() => setAuthState("login")} className="text-sky-500 font-bold hover:underline">Giriş Yap</button></p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // CHAT EKRANI (ORİJİNAL TASARIMIN)
+  // --- CHAT EKRANI ---
   return (
     <div className={`flex h-screen bg-slate-950 text-white font-sans overflow-hidden transition-all duration-100 ${isNudged ? 'translate-x-2 translate-y-2 scale-[1.01]' : ''}`}>
-      {/* SIDEBAR */}
       <div className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-2xl font-black text-rose-500 tracking-tighter">Dumbasscord</h1>
           <div className="flex items-center justify-between mt-1">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{userName}</p>
-            <button onClick={() => setAuthState("login")} className="text-[9px] text-rose-400 hover:underline">ÇIKIŞ</button>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest truncate max-w-[150px]">{userName}</p>
+            <button onClick={() => setIsJoined(false)} className="text-[9px] text-rose-400 hover:underline font-black">ÇIKIŞ</button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           <div>
-            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Odalar</h3>
+            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 tracking-widest">Odalar</h3>
             <div className="space-y-1">
               {roomsToRender.map(room => (
                 <div key={room.name} className="flex items-center gap-2 pr-2">
@@ -301,7 +317,7 @@ export default function Home() {
             </div>
           </div>
           <div>
-            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Sunucular</h3>
+            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 tracking-widest">Sunucular</h3>
             <div className="space-y-1">
               {servers.map((server) => (
                 <div key={server.id} className="flex items-center gap-2 pr-2">
@@ -318,7 +334,7 @@ export default function Home() {
             </div>
           </div>
           <div>
-            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 font-mono tracking-widest">Yeni Oda</h3>
+            <h3 className="text-[10px] font-black text-slate-500 mb-3 uppercase px-2 tracking-widest">Yeni Oda</h3>
             <div className="flex gap-2 px-2">
                <input type="text" placeholder="Oda adı..." className="w-full p-2 bg-slate-800 border border-slate-700 rounded-xl text-xs outline-none focus:border-rose-500 transition-colors" value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} />
               <button onClick={createRoom} className="bg-rose-600 text-white px-3 rounded-xl font-bold text-xs transform hover:scale-125 active:scale-90 transition-all shadow-lg">+</button>
@@ -331,7 +347,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ANA PANEL */}
       <div className="flex-1 flex bg-slate-950">
         {!currentRoom ? (
           <div className="flex-1 flex items-center justify-center text-slate-500 italic">Dumbasscord'a hoş geldin!</div>
