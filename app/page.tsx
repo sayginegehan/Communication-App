@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 
+// CANLI BAĞLANTI AYARI
 const socketServerUrl =
   process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "https://communication-app-production.up.railway.app";
 const socketAuthToken = process.env.NEXT_PUBLIC_SOCKET_AUTH_TOKEN || "";
@@ -15,20 +16,26 @@ const socket = io(socketServerUrl, {
 });
 
 export default function Home() {
+  // AUTH DURUMLARI
+  const [authState, setAuthState] = useState<"login" | "register" | "chat">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [userName, setUserName] = useState("");
+
+  // CHAT DURUMLARI
   const [servers, setServers] = useState<any[]>([]);
   const [currentServer, setCurrentServer] = useState("default");
   const [newServerName, setNewServerName] = useState("");
-  const [userName, setUserName] = useState("");
   const [currentRoom, setCurrentRoom] = useState("");
   const [newRoomName, setNewRoomName] = useState("");
   const [activeRooms, setActiveRooms] = useState<any[]>([]);
-  const [isJoined, setIsJoined] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isNudged, setIsNudged] = useState(false);
+  
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string } | null>(null);
   const [userVolumes, setUserVolumes] = useState<{ [key: string]: number }>({});
 
@@ -163,17 +170,10 @@ export default function Home() {
         };
         checkVolume();
       }
-      socket.emit(
-        "join-room",
-        { roomId: roomName, userName, serverId: currentServer },
-        (res: any) => {
-          if (res?.ok) {
-            setCurrentRoom(roomName);
-          } else if (res?.error) {
-            alert(res.error);
-          }
-        }
-      );
+      socket.emit("join-room", { roomId: roomName, userName, serverId: currentServer }, (res: any) => {
+          if (res?.ok) setCurrentRoom(roomName);
+          else if (res?.error) alert(res.error);
+      });
     } catch (err) { alert("Mikrofon hatası!"); }
   };
 
@@ -184,25 +184,18 @@ export default function Home() {
       if (res?.ok && res.serverId) {
         setCurrentServer(res.serverId);
         setNewServerName("");
-      } else if (res?.error) {
-        alert("Sunucu Hatası: " + res.error);
-      }
+      } else if (res?.error) alert("Sunucu Hatası: " + res.error);
     });
   };
 
   const createRoom = async () => {
     const value = newRoomName.trim();
     if (!value) return;
-    socket.emit(
-      "create-room",
-      { serverId: currentServer, roomName: value, userName },
-      async (res: any) => {
+    socket.emit("create-room", { serverId: currentServer, roomName: value, userName }, async (res: any) => {
         if (res?.ok) {
           await handleJoinRoom(value);
           setNewRoomName("");
-        } else if (res?.error) {
-          alert("Oda Hatası: " + res.error);
-        }
+        } else if (res?.error) alert("Oda Hatası: " + res.error);
       }
     );
   };
@@ -233,46 +226,64 @@ export default function Home() {
     e.preventDefault();
     if (newMessage.trim()) {
       socket.emit("send-message", { text: newMessage }, (res: any) => {
-        if (!res?.ok && res?.error) {
-          alert(res.error);
-        }
+        if (!res?.ok && res?.error) alert(res.error);
       });
       setNewMessage("");
     }
   };
 
-  const myRole =
-    users.find((u) => u.id === socket.id)?.role ||
-    users.find((u) => u.name === userName)?.role ||
-    "member";
-
-  const filteredRooms = activeRooms.filter(
-    (room) => (room.serverId || "default") === currentServer
-  );
+  const myRole = users.find((u) => u.id === socket.id)?.role || users.find((u) => u.name === userName)?.role || "member";
+  const filteredRooms = activeRooms.filter((room) => (room.serverId || "default") === currentServer);
   const roomsToRender = filteredRooms.length > 0 ? filteredRooms : activeRooms;
 
-  if (!isJoined) {
+  // --- AUTH EKRANLARI ---
+
+  // GİRİŞ EKRANI
+  if (authState === "login") {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white font-sans">
         <div className="w-full max-w-sm bg-slate-900 p-10 rounded-[40px] shadow-2xl border border-slate-800">
-          <h1 className="text-4xl font-black text-rose-500 text-center mb-8 tracking-tighter cursor-default">Dumbasscord</h1>
-          <input 
-            type="text" placeholder="Takma Adınız" 
-            className="w-full p-5 bg-slate-800 border border-slate-700 rounded-3xl outline-none text-center text-lg font-bold text-white focus:border-rose-500 placeholder:text-slate-500 transition-all"
-            value={userName} onChange={(e) => setUserName(e.target.value)}
-          />
-          <button onClick={() => userName.trim() && setIsJoined(true)} className="w-full mt-6 bg-rose-600 text-white p-5 rounded-3xl font-black text-lg hover:bg-rose-700 transform active:scale-95 transition-all shadow-lg">BAĞLAN</button>
+          <h1 className="text-4xl font-black text-rose-500 text-center mb-8 tracking-tighter">Giriş Yap</h1>
+          <div className="space-y-4">
+            <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-rose-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-rose-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button onClick={() => { if(email && password) { setUserName(email.split('@')[0]); setAuthState("chat"); } }} className="w-full bg-rose-600 text-white p-4 rounded-2xl font-black hover:bg-rose-700 transition-all shadow-lg">GİRİŞ YAP</button>
+            <p className="text-center text-xs text-slate-500">Hesabın yok mu? <button onClick={() => setAuthState("register")} className="text-rose-500 font-bold hover:underline">Kayıt Ol</button></p>
+          </div>
         </div>
       </div>
     );
   }
 
+  // KAYIT EKRANI
+  if (authState === "register") {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white font-sans">
+        <div className="w-full max-w-sm bg-slate-900 p-10 rounded-[40px] shadow-2xl border border-slate-800">
+          <h1 className="text-4xl font-black text-sky-500 text-center mb-8 tracking-tighter">Hesap Oluştur</h1>
+          <div className="space-y-4">
+            <input type="text" placeholder="Kullanıcı Adı" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-sky-500 transition-all" value={userName} onChange={(e) => setUserName(e.target.value)} />
+            <input type="email" placeholder="E-posta" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-sky-500 transition-all" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" placeholder="Şifre" className="w-full p-4 bg-slate-800 border border-slate-700 rounded-2xl outline-none focus:border-sky-500 transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button onClick={() => { if(userName && email && password) setAuthState("login"); }} className="w-full bg-sky-600 text-white p-4 rounded-2xl font-black hover:bg-sky-700 transition-all shadow-lg">KAYIT OL</button>
+            <p className="text-center text-xs text-slate-500">Zaten üye misin? <button onClick={() => setAuthState("login")} className="text-sky-500 font-bold hover:underline">Giriş Yap</button></p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // CHAT EKRANI (ORİJİNAL TASARIMIN)
   return (
     <div className={`flex h-screen bg-slate-950 text-white font-sans overflow-hidden transition-all duration-100 ${isNudged ? 'translate-x-2 translate-y-2 scale-[1.01]' : ''}`}>
+      {/* SIDEBAR */}
       <div className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-2xl font-black text-rose-500 tracking-tighter">Dumbasscord</h1>
-          <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 tracking-widest">{userName}</p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{userName}</p>
+            <button onClick={() => setAuthState("login")} className="text-[9px] text-rose-400 hover:underline">ÇIKIŞ</button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           <div>
@@ -284,12 +295,7 @@ export default function Home() {
                     <span className="truncate pr-1"># {room.name}</span>
                     <span className="text-[10px] bg-slate-700 px-2 rounded-full shrink-0">{room.count}</span>
                   </button>
-                  <button 
-                    onClick={() => confirm(`${room.name} odasını silmek istediğine emin misin?`) && socket.emit("delete-room", { serverId: currentServer, roomName: room.name, userName })}
-                    className="p-2 text-rose-500 hover:bg-rose-500/20 rounded-xl transition-all shrink-0"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                  </button>
+                  <button onClick={() => confirm(`${room.name} odasını silmek istediğine emin misin?`) && socket.emit("delete-room", { serverId: currentServer, roomName: room.name, userName })} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
                 </div>
               ))}
             </div>
@@ -299,16 +305,9 @@ export default function Home() {
             <div className="space-y-1">
               {servers.map((server) => (
                 <div key={server.id} className="flex items-center gap-2 pr-2">
-                  <button onClick={() => setCurrentServer(server.id)} className={`flex-1 text-left p-3 rounded-2xl text-xs font-bold transition-all ${currentServer === server.id ? "bg-rose-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}>
-                    <span className="truncate">{server.name}</span>
-                  </button>
+                  <button onClick={() => setCurrentServer(server.id)} className={`flex-1 text-left p-3 rounded-2xl text-xs font-bold transition-all ${currentServer === server.id ? "bg-rose-600 text-white" : "text-slate-300 hover:bg-slate-800"}`}><span className="truncate">{server.name}</span></button>
                   {server.id !== "default" && (
-                    <button 
-                      onClick={() => confirm(`${server.name} sunucusunu silmek istediğine emin misin?`) && socket.emit("delete-server", { serverId: server.id, userName })}
-                      className="p-2 text-rose-500 hover:bg-rose-500/20 rounded-xl transition-all shrink-0"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                    </button>
+                    <button onClick={() => confirm(`${server.name} sunucusunu silmek istediğine emin misin?`) && socket.emit("delete-server", { serverId: server.id, userName })} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
                   )}
                 </div>
               ))}
@@ -327,13 +326,12 @@ export default function Home() {
           </div>
         </div>
         <div className="p-4 bg-slate-800/50 border-t border-slate-800 space-y-3">
-          <button onClick={() => { const t = localStream.current?.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; socket.emit("mute-status", !t.enabled); } setIsMuted(!isMuted); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transform hover:scale-105 active:scale-95 transition-all ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>
-            {isMuted ? "Mikrofonu Aç" : "Mikrofonu Kapat"}
-          </button>
-          <button onClick={() => socket.emit("send-nudge")} className="w-full p-4 bg-amber-500 rounded-2xl font-black text-[10px] uppercase hover:bg-amber-600 transform hover:scale-105 active:scale-95 transition-all text-slate-900 shadow-lg">Dürt! (Herkesi)</button>
+          <button onClick={() => { const t = localStream.current?.getAudioTracks()[0]; if (t) { t.enabled = !t.enabled; socket.emit("mute-status", !t.enabled); } setIsMuted(!isMuted); }} className={`w-full p-4 rounded-2xl font-black text-[10px] uppercase transition-all ${isMuted ? 'bg-rose-600' : 'bg-sky-600'}`}>{isMuted ? "Mikrofonu Aç" : "Mikrofonu Kapat"}</button>
+          <button onClick={() => socket.emit("send-nudge")} className="w-full p-4 bg-amber-500 rounded-2xl font-black text-[10px] uppercase hover:bg-amber-600 transition-all text-slate-900 shadow-lg">Dürt! (Herkesi)</button>
         </div>
       </div>
 
+      {/* ANA PANEL */}
       <div className="flex-1 flex bg-slate-950">
         {!currentRoom ? (
           <div className="flex-1 flex items-center justify-center text-slate-500 italic">Dumbasscord'a hoş geldin!</div>
@@ -342,12 +340,11 @@ export default function Home() {
             <div className="flex-1 flex flex-col border-r border-slate-800 relative">
               <div className="p-6 border-b border-slate-800 bg-slate-900/30 flex justify-between items-center">
                 <h2 className="font-black text-xl uppercase tracking-tight"># {currentRoom}</h2>
-                <button onClick={handleScreenShare} className={`flex items-center gap-2 text-[10px] px-4 py-2 rounded-full font-black uppercase transition-all shadow-lg transform hover:scale-105 active:scale-95 ${isSharingScreen ? 'bg-rose-600 border border-rose-400 animate-pulse' : 'bg-slate-800 border border-slate-700 hover:border-rose-500 text-slate-200'}`}>
+                <button onClick={handleScreenShare} className={`flex items-center gap-2 text-[10px] px-4 py-2 rounded-full font-black uppercase transition-all shadow-lg ${isSharingScreen ? 'bg-rose-600 border border-rose-400 animate-pulse' : 'bg-slate-800 border border-slate-700 hover:border-rose-500 text-slate-200'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${isSharingScreen ? 'bg-white' : 'bg-rose-500'}`}></span>
                     {isSharingScreen ? "Yayını Durdur" : "Ekran Paylaş"}
                 </button>
               </div>
-              
               <div className="flex-1 p-8 overflow-y-auto flex flex-col gap-6">
                 {users.some(u => u.isSharingScreen) && (
                     <div className="w-full aspect-video bg-black rounded-[40px] overflow-hidden border-4 border-rose-600/20 shadow-2xl relative">
@@ -355,7 +352,6 @@ export default function Home() {
                         <div className="absolute top-6 left-6 bg-rose-600 px-4 py-2 rounded-full text-[10px] font-black uppercase animate-pulse shadow-xl">CANLI YAYIN</div>
                     </div>
                 )}
-                
                 <div className="flex flex-col gap-3">
                   {users.map((u) => (
                     <div key={u.id} onContextMenu={(e) => handleContextMenu(e, u.id)} className={`p-4 rounded-3xl border-4 flex items-center gap-5 transition-all duration-300 relative cursor-context-menu w-80 ${u.isSpeaking ? 'border-sky-500 bg-sky-950/20' : 'border-slate-800 bg-slate-900'} shadow-lg`}>
@@ -375,7 +371,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
+            {/* CHAT PANELİ */}
             <div className="w-80 flex flex-col bg-slate-900/50 backdrop-blur-md shrink-0">
               <div className="p-4 border-b border-slate-800 font-black text-[10px] uppercase text-slate-500 bg-slate-900/20 tracking-widest">Sohbet</div>
               <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
