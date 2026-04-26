@@ -84,11 +84,6 @@ export default function ChannelList({
           </div>
         </div>
 
-        <div className="bg-slate-800/20 p-3 rounded-xl border border-slate-800/50 mb-2">
-          <p className="text-[8px] text-slate-500 font-bold uppercase mb-1">Davet Kodu</p>
-          <p className="text-xs font-black text-sky-400">dumbass.link/A78B</p>
-        </div>
-
         <div className="space-y-1">
           <h3 className="text-[10px] font-black text-slate-500 mb-2 uppercase px-2 tracking-widest flex justify-between items-center">
             Kanallar{" "}

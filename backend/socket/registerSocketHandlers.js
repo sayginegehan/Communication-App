@@ -831,6 +831,36 @@ function registerSocketHandlers(io, { state, store, env }) {
       }
     });
 
+    socket.on("delete-message", async (payload, ack) => {
+      try {
+        const parsed = z.object({ messageId: z.union([z.string(), z.number()]) }).parse(payload);
+        const user = state.getUser(socket.id);
+        if (!user?.room) {
+          throw new Error("User not in room");
+        }
+        const history = await store.getRecentMessages(user.room, 200);
+        const target = history.find((message) => String(message.id) === String(parsed.messageId));
+        if (!target) {
+          throw new Error("Mesaj bulunamadı.");
+        }
+        if (target.sender !== user.name) {
+          throw new Error("Sadece kendi mesajını silebilirsin.");
+        }
+        const sanitizedHistory = history.filter(
+          (message) => String(message.id) !== String(parsed.messageId)
+        );
+        if (store.kind === "json") {
+          // Json store has no delete primitive; rewrite by clear+append.
+          store.data.rooms[user.room].messages = sanitizedHistory;
+          store.flush();
+        }
+        io.to(user.room).emit("message-history", sanitizedHistory);
+        if (typeof ack === "function") ack({ ok: true });
+      } catch (error) {
+        if (typeof ack === "function") ack({ ok: false, error: error.message });
+      }
+    });
+
     socket.on("moderate-user", async (payload, ack) => {
       try {
         const parsed = z

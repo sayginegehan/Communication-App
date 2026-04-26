@@ -12,7 +12,9 @@ import SelectedUserCard from "../components/Overlays/SelectedUserCard";
 import UserAudioMenu from "../components/Overlays/UserAudioMenu";
 import DialogModal from "../components/Overlays/DialogModal";
 
-const socketServerUrl = "https://communication-app-production.up.railway.app";
+const socketServerUrl =
+  process.env.NEXT_PUBLIC_SOCKET_SERVER_URL ||
+  "https://communication-app-production.up.railway.app";
 const socketPath = "/socket.io";
 const socket = io(socketServerUrl, { path: socketPath, transports: ["websocket", "polling"], withCredentials: true });
 
@@ -93,8 +95,10 @@ export default function Home() {
   const [userVolumes, setUserVolumes] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [reactionsByMessage, setReactionsByMessage] = useState<Record<string, number>>({});
+  const [likedByMe, setLikedByMe] = useState<Record<string, boolean>>({});
   const [unreadByRoom, setUnreadByRoom] = useState<Record<string, number>>({});
   const [toasts, setToasts] = useState<Array<{ id: number; text: string }>>([]);
+  const [isPinnedPanelOpen, setIsPinnedPanelOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") {
       return "dark";
@@ -327,6 +331,23 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!currentRoom || !localStream.current) {
+      return;
+    }
+    users
+      .filter((user) => user.id !== socket.id && user.roomName === currentRoom)
+      .forEach(async (user) => {
+        if (peerConnections.current[user.id]) return;
+        const pc = createPeerConnection(user.id);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("offer", { offer, to: user.id });
+      });
+    // createPeerConnection is stable for this socket lifecycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, currentRoom]);
+
+  useEffect(() => {
     Object.values(remoteAudios.current).forEach((audio) => {
       audio.muted = isDeafened;
     });
@@ -371,22 +392,17 @@ export default function Home() {
   };
 
   const leaveCurrentRoom = () => {
-    if (!currentRoom) {
-      return;
-    }
-    socket.emit("leave-room", {}, (res: { ok?: boolean; error?: string }) => {
-      if (!res?.ok) {
-        alert(res?.error || "Odadan ayrılamadın.");
-        return;
-      }
-      setCurrentRoom("");
-      setTypingUsers([]);
-      setMessages([]);
-      setSelectedUserId(null);
-      setAudioMenu(null);
-      setSearchTerm("");
-      resetVoiceConnections();
-    });
+    if (!currentRoom) return;
+    const lastRoom = currentRoom;
+    setCurrentRoom("");
+    setTypingUsers([]);
+    setMessages([]);
+    setSelectedUserId(null);
+    setAudioMenu(null);
+    setSearchTerm("");
+    resetVoiceConnections();
+    socket.emit("typing-status", { roomId: lastRoom, serverId: currentServer, userName, isTyping: false });
+    socket.emit("leave-room", {});
   };
 
   const submitCreateRoom = (roomName: string) => {
@@ -535,7 +551,7 @@ export default function Home() {
       socket.emit(
         "send-message",
         {
-          text: "",
+          text: `[Dosya] ${file.name}`,
           attachment: {
             name: file.name,
             type: file.type || "application/octet-stream",
@@ -566,6 +582,7 @@ export default function Home() {
     setMessages([]);
     setTypingUsers([]);
     setSearchTerm("");
+    setIsPinnedPanelOpen(false);
     resetVoiceConnections();
     setSelectedUserId(null);
     setAudioMenu(null);
@@ -596,10 +613,29 @@ export default function Home() {
 
   const toggleReaction = (messageId: number | string) => {
     const key = String(messageId);
-    setReactionsByMessage((prev) => ({
-      ...prev,
-      [key]: (prev[key] || 0) + 1,
-    }));
+    setLikedByMe((prevLiked) => {
+      const liked = Boolean(prevLiked[key]);
+      setReactionsByMessage((prevCounts) => {
+        const current = prevCounts[key] || 0;
+        return {
+          ...prevCounts,
+          [key]: liked ? Math.max(0, current - 1) : current + 1,
+        };
+      });
+      return {
+        ...prevLiked,
+        [key]: !liked,
+      };
+    });
+  };
+
+  const handleDeleteMessage = (message: ChatMessage) => {
+    setMessages((prev) => prev.filter((item) => item.id !== message.id));
+    socket.emit("delete-message", { messageId: message.id }, (res: { ok?: boolean; error?: string }) => {
+      if (!res?.ok) {
+        alert(res?.error || "Mesaj silinemedi.");
+      }
+    });
   };
 
   const handleModerateUser = (action: "mute" | "kick" | "ban") => {
@@ -725,17 +761,6 @@ export default function Home() {
         onRequestClearAll={() => setDialog({ type: "clear-all" })}
       />
 
-      <button
-        onClick={() => {
-          const nextTheme = themeMode === "dark" ? "light" : "dark";
-          setThemeMode(nextTheme);
-          window.localStorage.setItem("theme-mode", nextTheme);
-        }}
-        className="fixed left-24 top-4 z-[100] text-[11px] px-3 py-1.5 rounded-lg bg-slate-800 text-white"
-      >
-        Tema: {themeMode === "dark" ? "Koyu" : "Açık"}
-      </button>
-
       <div className="w-72 min-w-72 h-full flex flex-col border-r border-slate-800">
         <ChannelList
           rooms={activeRooms.filter((r) => (r.serverId || "default") === currentServer)}
@@ -765,7 +790,7 @@ export default function Home() {
         <ControlBar isMuted={isMuted} isDeafened={isDeafened} toggleMute={toggleMute} toggleDeafen={toggleDeafen} />
       </div>
 
-      <div className="flex-1 flex bg-slate-950 p-4 md:p-8 overflow-y-auto min-w-0">
+      <div className={`flex-1 flex p-4 md:p-8 overflow-y-auto min-w-0 ${themeMode === "dark" ? "bg-slate-950" : "bg-slate-100"}`}>
         <ChatArea
           messages={messages}
           newMessage={newMessage}
@@ -782,6 +807,16 @@ export default function Home() {
           onSearchTermChange={setSearchTerm}
           reactionsByMessage={reactionsByMessage}
           onToggleReaction={toggleReaction}
+          likedByMe={likedByMe}
+          onDeleteMessage={handleDeleteMessage}
+          isPinnedPanelOpen={isPinnedPanelOpen}
+          onTogglePinnedPanel={() => setIsPinnedPanelOpen((prev) => !prev)}
+          themeMode={themeMode}
+          onToggleThemeMode={() => {
+            const nextTheme = themeMode === "dark" ? "light" : "dark";
+            setThemeMode(nextTheme);
+            window.localStorage.setItem("theme-mode", nextTheme);
+          }}
         />
       </div>
 

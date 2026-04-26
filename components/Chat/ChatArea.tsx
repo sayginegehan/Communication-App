@@ -30,6 +30,12 @@ interface ChatAreaProps {
   onSearchTermChange: (value: string) => void;
   reactionsByMessage: Record<string, number>;
   onToggleReaction: (messageId: number | string) => void;
+  likedByMe: Record<string, boolean>;
+  onDeleteMessage: (message: MessageItem) => void;
+  isPinnedPanelOpen: boolean;
+  onTogglePinnedPanel: () => void;
+  themeMode: "dark" | "light";
+  onToggleThemeMode: () => void;
 }
 
 export default function ChatArea({
@@ -48,6 +54,12 @@ export default function ChatArea({
   onSearchTermChange,
   reactionsByMessage,
   onToggleReaction,
+  likedByMe,
+  onDeleteMessage,
+  isPinnedPanelOpen,
+  onTogglePinnedPanel,
+  themeMode,
+  onToggleThemeMode,
 }: ChatAreaProps) {
   const visibleMessages = searchTerm.trim()
     ? messages.filter(
@@ -58,12 +70,17 @@ export default function ChatArea({
     : messages;
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950">
-      <div className="p-4 border-b border-slate-900 bg-slate-900/20 flex justify-between items-center shadow-sm">
+    <div className={`flex-1 flex flex-col ${themeMode === "dark" ? "bg-slate-950" : "bg-slate-100"}`}>
+      <div className={`p-4 border-b flex justify-between items-center shadow-sm ${themeMode === "dark" ? "border-slate-900 bg-slate-900/20" : "border-slate-200 bg-white"}`}>
         <h2 className="font-black text-sm uppercase tracking-widest"># {currentRoom || "Kanal Seçilmedi"}</h2>
         <div className="flex gap-4 text-slate-500 text-xs font-bold uppercase">
           <span className="hover:text-white cursor-pointer">Duyurular</span>
-          <span className="hover:text-white cursor-pointer">Sabitlenenler ({pinnedMessages.length})</span>
+          <button type="button" onClick={onTogglePinnedPanel} className="hover:text-white">
+            Sabitlenenler ({pinnedMessages.length})
+          </button>
+          <button type="button" onClick={onToggleThemeMode} className="hover:text-white normal-case">
+            {themeMode === "dark" ? "Açık Tema" : "Koyu Tema"}
+          </button>
         </div>
       </div>
       <div className="px-4 py-2 border-b border-slate-900">
@@ -76,7 +93,7 @@ export default function ChatArea({
         />
       </div>
 
-      {pinnedMessages.length > 0 ? (
+      {isPinnedPanelOpen && pinnedMessages.length > 0 ? (
         <div className="px-6 py-3 border-b border-slate-900 bg-slate-900/40 space-y-2 max-h-28 overflow-y-auto">
           {pinnedMessages.slice(-3).map((m) => (
             <div key={`pinned-${m.id}`} className="text-xs text-slate-300 truncate">
@@ -122,10 +139,21 @@ export default function ChatArea({
             <button
               type="button"
               onClick={() => onToggleReaction(m.id)}
-              className="absolute right-14 top-2 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-all bg-slate-700 text-slate-200"
+              className={`absolute right-14 top-2 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-all ${
+                likedByMe[String(m.id)] ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-200"
+              }`}
             >
               👍 {reactionsByMessage[String(m.id)] || 0}
             </button>
+            {m.sender === userName ? (
+              <button
+                type="button"
+                onClick={() => onDeleteMessage(m)}
+                className="absolute right-28 top-2 text-xs px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-all bg-rose-700 text-white"
+              >
+                Sil
+              </button>
+            ) : null}
           </div>
         ))}
       </div>
